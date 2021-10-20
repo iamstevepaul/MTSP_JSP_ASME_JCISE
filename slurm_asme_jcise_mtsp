@@ -7,8 +7,8 @@
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --job-name="mtsp_stevepau_fa"
-#SBATCH --output=output_mtsp.out
-#SBATCH --error=error_mtsp.err
+#SBATCH --output=output_mtsp_fa.out
+#SBATCH --error=error_mtsp_fa.err
 #SBATCH --mail-user=stevepau@buffalo.edu
 #SBATCH --mail-type=END
 #SBATCH --exclusive

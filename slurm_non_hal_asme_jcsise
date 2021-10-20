@@ -4,9 +4,9 @@
 #SBATCH --qos=scavenger
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2
-#SBATCH --job-name="mrta_gini"
-#SBATCH --output=output_mrta.out
-#SBATCH --error=error_mrta.err
+#SBATCH --job-name="mtsp_stevepau"
+#SBATCH --output=output_mtsp.out
+#SBATCH --error=error_mtsp.err
 #SBATCH --mail-user=stevepau@buffalo.edu
 #SBATCH --mail-type=END
 #SBATCH --exclusive
