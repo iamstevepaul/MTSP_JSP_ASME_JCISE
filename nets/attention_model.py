@@ -6,7 +6,7 @@ from typing import NamedTuple
 from utils.tensor_functions import compute_in_batches
 import time
 
-from nets.graph_encoder import GraphAttentionEncoder, CCN3, GCAPCN, GCAPCN_K_1_P_2_L_3, GCAPCN_K_1_P_2_L_2, GCAPCN_K_1_P_2_L_1, GCAPCN_K_2_P_3_L_1, GCAPCN_K_2_P_2_L_1, GCAPCN_K_2_P_1_L_1, GCAPCN_K_3_P_1_L_1, GCAPCN_K_1_P_1_L_1, GCAPCN_K_2_P_3_L_2
+from nets.graph_encoder import GraphAttentionEncoder, CCN, CCN3, GCAPCN, GCAPCN_K_1_P_2_L_3, GCAPCN_K_1_P_2_L_2, GCAPCN_K_1_P_2_L_1, GCAPCN_K_2_P_3_L_1, GCAPCN_K_2_P_2_L_1, GCAPCN_K_2_P_1_L_1, GCAPCN_K_3_P_1_L_1, GCAPCN_K_1_P_1_L_1, GCAPCN_K_2_P_3_L_2
 from torch.nn import DataParallel
 from utils.beam_search import CachedLookup
 from utils.functions import sample_many
@@ -85,7 +85,7 @@ class AttentionModel(nn.Module):
         step_context_dim = embedding_dim + 1
 
 
-        node_dim = 4# x, y, demand / prize
+        node_dim = 2# x, y, demand / prize
 
         if self.is_mrta:
             # n_robot = 20
@@ -109,7 +109,7 @@ class AttentionModel(nn.Module):
         #     normalization=normalization
         # ) ## this will be changed for CCN
 
-        self.embedder = CCN3(
+        self.embedder = CCN(
             embed_dim=embedding_dim,
             node_dim=2
         )
@@ -441,7 +441,7 @@ class AttentionModel(nn.Module):
         # print(state.tasks_done_success)
         # cost =  state.n_agents/state.tasks_done_success.to(torch.float) #(1 - torch.div(state.tasks_done_success, float(state.n_nodes)))*float(state.n_nodes)* state.n_agents
         # cost = torch.div(state.tasks_finish_time, state.deadline).sum(-1) #((state.tasks_finish_time - state.deadline)*(state.tasks_finish_time > state.deadline).to(torch.float)).sum(-1)
-        cost = state.lengths #(torch.div(state.tasks_finish_time, state.deadline)*(torch.div(state.tasks_finish_time, state.deadline) > 1).to(torch.int64)).sum(-1)
+        cost = state.lengths/((2**.5)*state.n_nodes) #(torch.div(state.tasks_finish_time, state.deadline)*(torch.div(state.tasks_finish_time, state.deadline) > 1).to(torch.int64)).sum(-1)
         # d = torch.div(state.lengths, float(state.n_nodes) * 1.414)
         # u = (r == 0).double()
         # cost = r - torch.mul(u, torch.exp(-d))
