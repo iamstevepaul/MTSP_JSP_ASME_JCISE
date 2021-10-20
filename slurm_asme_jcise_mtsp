@@ -1,14 +1,14 @@
 #!/bin/sh
-#SBATCH --time=30:00:00
+#SBATCH --time=36:00:00
 #SBATCH --account=kdantu
 #SBATCH --cluster=faculty
 #SBATCH --partition=hal
 #SBATCH --qos=hal
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:2
-#SBATCH --job-name="mrta_gini"
-#SBATCH --output=output_mrta.out
-#SBATCH --error=error_mrta.err
+#SBATCH --gres=gpu:1
+#SBATCH --job-name="mtsp_stevepau_fa"
+#SBATCH --output=output_mtsp.out
+#SBATCH --error=error_mtsp.err
 #SBATCH --mail-user=stevepau@buffalo.edu
 #SBATCH --mail-type=END
 #SBATCH --exclusive
