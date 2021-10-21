@@ -109,10 +109,15 @@ class AttentionModel(nn.Module):
         #     normalization=normalization
         # ) ## this will be changed for CCN
 
-        self.embedder = CCN(
-            embed_dim=embedding_dim,
-            node_dim=2
-        )
+        # self.embedder = CCN(
+        #     embed_dim=embedding_dim,
+        #     node_dim=2
+        # )
+
+        self.embedder = GCAPCN_K_1_P_2_L_3(
+                    n_dim=embedding_dim,
+                    node_dim=2
+                )
 
         # encoder_n = 4
         #
