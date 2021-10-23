@@ -125,6 +125,16 @@ class JSPDataset(Dataset):
 
         else:
 
+            n_machines = 20
+
+            n_jobs = 10
+
+            n_operations = 100
+
+            operations_machines_assignment = torch.randint(1, n_machines+1, (num_samples, n_operations))
+
+            operations_jobs_assignment = torch.randint(1, n_jobs+1, (num_samples, n_operations))
+
             max_n_agent = 20
 
             n_agents_available = torch.arange(2,max_n_agent+1)

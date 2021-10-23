@@ -206,16 +206,16 @@ class StateMRTA(NamedTuple):
         non_zero_indices = torch.nonzero(selected)
         # print(non_zero_indices.size()[0])
         if non_zero_indices.size()[0] > 0:
-            deadlines = self.deadline[self.ids.view(-1), selected.view(-1) - 1]
-            dest_time = self.robots_next_decision_time[self.ids.view(-1), self.robot_taking_decision[self.ids].view(-1)]
-            self.tasks_finish_time[self.ids, selected - 1] = dest_time[:, None]
-
-            feas_ids = (deadlines > dest_time).nonzero()
-            combined = torch.cat((non_zero_indices[:,0], feas_ids[:,0]))
-            uniques, counts = combined.unique(return_counts=True)
-            intersection = uniques[counts > 1]
-            if intersection.size()[0] > 0:
-                self.tasks_done_success[intersection] += 1
+            # deadlines = self.deadline[self.ids.view(-1), selected.view(-1) - 1]
+            # dest_time = self.robots_next_decision_time[self.ids.view(-1), self.robot_taking_decision[self.ids].view(-1)]
+            # self.tasks_finish_time[self.ids, selected - 1] = dest_time[:, None]
+            #
+            # feas_ids = (deadlines > dest_time).nonzero()
+            # combined = torch.cat((non_zero_indices[:,0], feas_ids[:,0]))
+            # uniques, counts = combined.unique(return_counts=True)
+            # intersection = uniques[counts > 1]
+            # if intersection.size()[0] > 0:
+            #     self.tasks_done_success[intersection] += 1
             self.tasks_visited[non_zero_indices[:, 0]] += 1
 
         self.robots_start_point[self.ids, self.robot_taking_decision] = self.robots_current_destination[
@@ -236,6 +236,8 @@ class StateMRTA(NamedTuple):
         self.robots_current_destination_location[self.ids, self.robot_taking_decision] = new_cur_coord
         lengths = self.lengths + (cur_coords - self.coords[self.ids, selected]).norm(2,2)
         visited_[:,:,0] = 0
+
+
 
         return self._replace(
             prev_a=prev_a, previous_decision_time = previous_time, current_time = current_time,

@@ -125,7 +125,7 @@ class MRTADataset(Dataset):
 
         else:
 
-            max_n_agent = 20
+            max_n_agent = 10
 
             n_agents_available = torch.arange(2,max_n_agent+1)
 
@@ -139,42 +139,44 @@ class MRTADataset(Dataset):
 
             for i in range(num_samples):
                 n_agents = n_agents_available[agents_ids[i, 0].item()].item()
-                agents_location = (torch.randint(0, 101, (max_n_agent, 2)).to(torch.float) / 100)
+                # agents_location = (torch.randint(0, 101, (max_n_agent, 2)).to(torch.float) / 100)
 
                 loc = torch.FloatTensor(size, 2).uniform_(0, 1)
-                workload = torch.FloatTensor(size).uniform_(.2, .2)
-                d_low = (((loc[:, None, :].expand((size, max_n_agent, 2)) - agents_location[None].expand(
-                    (size, max_n_agent, 2))).norm(2, -1).max() / max_speed) + 20).to(torch.int64) + 1
-                d_high = ((35) * (45) * 100 / (380) + d_low).to(torch.int64) + 1
-                d_low = d_low * (.5 * groups[i, 0])
-                d_high = ((d_high * (.5 * groups[i, 0]) / 10).to(torch.int64) + 1) * 10
-                deadline_normal = (torch.rand(size, 1) * (d_high - d_low) + d_low).to(torch.int64) + 1
+                # workload = torch.FloatTensor(size).uniform_(.2, .2)
+                # d_low = (((loc[:, None, :].expand((size, max_n_agent, 2)) - agents_location[None].expand(
+                #     (size, max_n_agent, 2))).norm(2, -1).max() / max_speed) + 20).to(torch.int64) + 1
+                # d_high = ((35) * (45) * 100 / (380) + d_low).to(torch.int64) + 1
+                # d_low = d_low * (.5 * groups[i, 0])
+                # d_high = ((d_high * (.5 * groups[i, 0]) / 10).to(torch.int64) + 1) * 10
+                # deadline_normal = (torch.rand(size, 1) * (d_high - d_low) + d_low).to(torch.int64) + 1
+                #
+                # n_norm_tasks = dist[i, 0] * 25
+                # rand_mat = torch.rand(size, 1)
+                # k = n_norm_tasks.item()  # For the general case change 0.25 to the percentage you need
+                # k_th_quant = torch.topk(rand_mat.T, k, largest=False)[0][:, -1:]
+                # bool_tensor = rand_mat <= k_th_quant
+                # normal_dist_tasks = torch.where(bool_tensor, torch.tensor(1), torch.tensor(0))
 
-                n_norm_tasks = dist[i, 0] * 25
-                rand_mat = torch.rand(size, 1)
-                k = n_norm_tasks.item()  # For the general case change 0.25 to the percentage you need
-                k_th_quant = torch.topk(rand_mat.T, k, largest=False)[0][:, -1:]
-                bool_tensor = rand_mat <= k_th_quant
-                normal_dist_tasks = torch.where(bool_tensor, torch.tensor(1), torch.tensor(0))
+                # slack_tasks = (normal_dist_tasks - 1).to(torch.bool).to(torch.int64)
 
-                slack_tasks = (normal_dist_tasks - 1).to(torch.bool).to(torch.int64)
+                # normal_dist_tasks_deadline = normal_dist_tasks * deadline_normal
+                #
+                # slack_tasks_deadline = slack_tasks * d_high
 
-                normal_dist_tasks_deadline = normal_dist_tasks * deadline_normal
+                # deadline_final = normal_dist_tasks_deadline + slack_tasks_deadline
+                depot = torch.FloatTensor(1, 2).uniform_(0, 1)
 
-                slack_tasks_deadline = slack_tasks * d_high
+                robots_start_location = ((torch.randint(0, 101, (max_n_agent, 2)).to(torch.float) / 100).to(
+                    device=loc.device)*0 + 1) * depot
+                #
+                # robots_work_capacity = torch.randint(1,3,(max_n_agent, 1), dtype=torch.float, device=deadline_final.device).view(-1)/100
 
-                deadline_final = normal_dist_tasks_deadline + slack_tasks_deadline
-
-                robots_start_location = (torch.randint(0, 101, (max_n_agent, 2)).to(torch.float) / 100).to(
-                    device=deadline_final.device)
-
-                robots_work_capacity = torch.randint(1,3,(max_n_agent, 1), dtype=torch.float, device=deadline_final.device).view(-1)/100
 
                 case_info = {
                     'loc': loc,
-                    'depot': torch.FloatTensor(1, 2).uniform_(0, 1),
-                    'deadline': deadline_final.to(torch.float).view(-1),
-                    'workload': workload,
+                    'depot': depot,
+                    'deadline': torch.empty([0]),#deadline_final.to(torch.float).view(-1),
+                    'workload': torch.empty([0]),#workload,
                     'initial_size': 100,
                     'n_agents': torch.tensor([[n_agents]]),
                     'max_n_agents': torch.tensor([[max_n_agent]]),
@@ -183,8 +185,8 @@ class MRTADataset(Dataset):
                     'max_speed': max_speed,
                     'enable_capacity_constraint': False,
                     'enable_range_constraint': False,
-                    'robots_start_location': robots_start_location,
-                    'robots_work_capacity': robots_work_capacity
+                    'robots_start_location': robots_start_location,#torch.empty([0]),
+                    'robots_work_capacity': torch.empty([0])
                 }
 
                 data.append(case_info)
