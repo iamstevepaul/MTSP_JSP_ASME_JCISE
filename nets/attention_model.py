@@ -448,7 +448,7 @@ class AttentionModel(nn.Module):
         # cost = torch.div(state.tasks_finish_time, state.deadline).sum(-1) #((state.tasks_finish_time - state.deadline)*(state.tasks_finish_time > state.deadline).to(torch.float)).sum(-1)
         # cost = state.lengths/((2**.5)*state.n_nodes) #(torch.div(state.tasks_finish_time, state.deadline)*(torch.div(state.tasks_finish_time, state.deadline) > 1).to(torch.int64)).sum(-1)
         mk = state.robots_next_decision_time + (state.robots_current_destination_location - state.coords[:,0,:][:,None]).norm(2,2)/state.max_speed
-        cost = (((torch.tensor(mk < mk.max(), dtype=torch.float)*mk).max(1))[0][:, None])/state.n_agents
+        cost = ((mk < mk.max()).to(torch.float32)*mk).max(1)[0][:, None]/state.n_agents
 
         # d = torch.div(state.lengths, float(state.n_nodes) * 1.414)
         # u = (r == 0).double()
