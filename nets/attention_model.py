@@ -114,7 +114,7 @@ class AttentionModel(nn.Module):
         #     node_dim=2
         # )
 
-        self.embedder = GCAPCN_K_1_P_2_L_3(
+        self.embedder = GCAPCN_K_2_P_3_L_2(
                     n_dim=embedding_dim,
                     node_dim=2
                 )

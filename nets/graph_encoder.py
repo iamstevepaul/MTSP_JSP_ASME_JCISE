@@ -963,8 +963,13 @@ class GCAPCN_K_2_P_3_L_2(nn.Module):
         self.activ = nn.LeakyReLU()
 
     def forward(self, data, mask=None):
-        X = torch.cat((data['loc'], data['deadline'][:, :, None], data['workload'][:, :, None]), -1)
-        X = torch.cat((X[:, :, 0:2], (X[:, :, 2] / X[:, :, 2].max())[:, :, None]), -1)
+        X = data['loc']  # torch.cat((data['loc'], data['deadline'][:, :, None], data['workload'][:, :, None]), -1)
+        # X = torch.cat((X[:, :, 0:2], (X[:, :, 2] / X[:, :, 2].max())[:, :, None]), -1)
+        # X = torch.cat((data['loc'], data['deadline']), -1)
+        # X_loc = X
+
+        # X = torch.cat((data['loc'], data['deadline'][:, :, None], data['workload'][:, :, None]), -1)
+        # X = torch.cat((X[:, :, 0:2], (X[:, :, 2] / X[:, :, 2].max())[:, :, None]), -1)
         # X = torch.cat((data['loc'], data['deadline']), -1)
         X_loc = X
         distance_matrix = (((X_loc[:, :, None] - X_loc[:, None]) ** 2).sum(-1)) ** .5
