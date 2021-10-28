@@ -11,10 +11,11 @@ import time
 
 
 def load_problem(name):
-    from problems import CVRP, MRTA
+    from problems import CVRP, MRTA, JSP
     problem = {
         'cvrp': CVRP,
         'mrta': MRTA,
+        'jsp': JSP
     }.get(name, None)
     assert problem is not None, "Currently unsupported problem: {}!".format(name)
     return problem

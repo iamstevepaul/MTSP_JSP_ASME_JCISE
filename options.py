@@ -9,11 +9,11 @@ def get_options(args=None):
         description="Attention based model for solving the Travelling Salesman Problem with Reinforcement Learning")
 
     # Data
-    parser.add_argument('--problem', default='mrta', help="The problem to solve, default 'tsp'")
+    parser.add_argument('--problem', default='jsp', help="The problem to solve, default 'tsp'")
     parser.add_argument('--graph_size', type=int, default=100, help="The size of the problem graph")
     parser.add_argument('--initial_size', type=int, default=150, help="The size of the problem graph when the simulation starts")
-    parser.add_argument('--batch_size', type=int, default=2000, help="Number of instances per batch during training") # changed
-    parser.add_argument('--epoch_size', type=int, default=200000, help="Number of instances per epoch during training") # changed
+    parser.add_argument('--batch_size', type=int, default=2, help="Number of instances per batch during training") # changed
+    parser.add_argument('--epoch_size', type=int, default=10, help="Number of instances per epoch during training") # changed
     parser.add_argument('--n_agents', type=int, default=50, help="Number of robots")
     parser.add_argument('--n_depot', type=int, default=1, help="Number of depot")
     parser.add_argument('--agent_max_range', type=int, default=4, help="Max range for the robot")
@@ -26,9 +26,9 @@ def get_options(args=None):
     parser.add_argument('--deadline_max', type=int, default=550,
                         help="Max value for deadline")
 
-    parser.add_argument('--val_size', type=int, default=20000, # changed
+    parser.add_argument('--val_size', type=int, default=4, # changed
                         help='Number of instances used for reporting validation performance')
-    parser.add_argument('--eval_batch_size', type=int, default=2000,  ## changed
+    parser.add_argument('--eval_batch_size', type=int, default=2,  ## changed
                         help="Batch size to use during (baseline) evaluation")
     parser.add_argument('--val_dataset', type=str, default=None, help='Dataset file to use for validation')
 

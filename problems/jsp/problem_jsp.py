@@ -41,7 +41,7 @@ class JSP(object):
 
     @staticmethod
     def make_dataset(*args, **kwargs):
-        return MRTADataset(*args, **kwargs)
+        return JSPDataset(*args, **kwargs)
 
     @staticmethod
     def make_state(*args, **kwargs):
