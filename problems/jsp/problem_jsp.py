@@ -125,99 +125,41 @@ class JSPDataset(Dataset):
 
         else:
 
-            n_machines = 20
-
+            n_samples = num_samples
+            n_tasks = 100
+            n_machines = 30
             n_jobs = 10
+            time_low = 10
+            time_high = 100
 
-            n_operations = 100
 
-            operations_machines_assignment = torch.randint(1, n_machines+1, (num_samples, n_operations))
+            job_list = []
 
-            operations_jobs_assignment = torch.randint(1, n_jobs+1, (num_samples, n_operations))
+            for i in range(n_samples):
+                task_machine_accessibility = torch.randint(0, 2, (n_machines, n_tasks))
+                task_machine_time = torch.randint(time_low, time_high + 1,
+                                                  (n_machines, n_tasks)) * task_machine_accessibility
+                task_job_mapping = torch.randint(1, n_jobs + 1, (1, n_tasks))
+                job_nums = torch.arange(1, n_jobs + 1)
 
-            max_n_agent = 20
+                n_ops_in_jobs = (task_job_mapping.expand((n_jobs, n_tasks)).T == job_nums).to(torch.float32).sum(0)
 
-            n_agents_available = torch.arange(2,max_n_agent+1)
+                data = {}
+                data["n_tasks"] = n_tasks
+                data["n_machines"] = n_machines
+                data["n_jobs"] = n_jobs
+                data["time_low"] = time_low
+                data["time_high"] = time_high
+                data["task_machine_accessibility"] = task_machine_accessibility
+                data["task_machine_time"] = task_machine_time
+                data["task_job_mapping"] = task_job_mapping
+                data["job_nums"] = job_nums
+                data["n_ops_in_jobs"] = n_ops_in_jobs
 
-            agents_ids = torch.randint(0, n_agents_available.shape[0], (num_samples, 1))
+                job_list.append(data)
 
-            groups = torch.randint(1, 3, (num_samples, 1))
+            self.data = job_list
 
-            dist = torch.randint(1, 5, (num_samples, 1))
-
-            data = []
-
-            for i in range(num_samples):
-                n_agents = n_agents_available[agents_ids[i, 0].item()].item()
-                agents_location = (torch.randint(0, 101, (max_n_agent, 2)).to(torch.float) / 100)
-
-                loc = torch.FloatTensor(size, 2).uniform_(0, 1)
-                workload = torch.FloatTensor(size).uniform_(.2, .2)
-                d_low = (((loc[:, None, :].expand((size, max_n_agent, 2)) - agents_location[None].expand(
-                    (size, max_n_agent, 2))).norm(2, -1).max() / max_speed) + 20).to(torch.int64) + 1
-                d_high = ((35) * (45) * 100 / (380) + d_low).to(torch.int64) + 1
-                d_low = d_low * (.5 * groups[i, 0])
-                d_high = ((d_high * (.5 * groups[i, 0]) / 10).to(torch.int64) + 1) * 10
-                deadline_normal = (torch.rand(size, 1) * (d_high - d_low) + d_low).to(torch.int64) + 1
-
-                n_norm_tasks = dist[i, 0] * 25
-                rand_mat = torch.rand(size, 1)
-                k = n_norm_tasks.item()  # For the general case change 0.25 to the percentage you need
-                k_th_quant = torch.topk(rand_mat.T, k, largest=False)[0][:, -1:]
-                bool_tensor = rand_mat <= k_th_quant
-                normal_dist_tasks = torch.where(bool_tensor, torch.tensor(1), torch.tensor(0))
-
-                slack_tasks = (normal_dist_tasks - 1).to(torch.bool).to(torch.int64)
-
-                normal_dist_tasks_deadline = normal_dist_tasks * deadline_normal
-
-                slack_tasks_deadline = slack_tasks * d_high
-
-                deadline_final = normal_dist_tasks_deadline + slack_tasks_deadline
-
-                robots_start_location = (torch.randint(0, 101, (max_n_agent, 2)).to(torch.float) / 100).to(
-                    device=deadline_final.device)
-
-                robots_work_capacity = torch.randint(1,3,(max_n_agent, 1), dtype=torch.float, device=deadline_final.device).view(-1)/100
-
-                case_info = {
-                    'loc': loc,
-                    'depot': torch.FloatTensor(1, 2).uniform_(0, 1),
-                    'deadline': deadline_final.to(torch.float).view(-1),
-                    'workload': workload,
-                    'initial_size': 100,
-                    'n_agents': torch.tensor([[n_agents]]),
-                    'max_n_agents': torch.tensor([[max_n_agent]]),
-                    'max_range': max_range,
-                    'max_capacity': max_capacity,
-                    'max_speed': max_speed,
-                    'enable_capacity_constraint': False,
-                    'enable_range_constraint': False,
-                    'robots_start_location': robots_start_location,
-                    'robots_work_capacity': robots_work_capacity
-                }
-
-                data.append(case_info)
-
-            self.data = data
-
-            # self.data = [
-            #     {
-            #         'loc': torch.FloatTensor(size, 2).uniform_(0, 1),
-            #         'depot': torch.FloatTensor(n_depot,2).uniform_(0, 1),
-            #         'deadline':torch.FloatTensor(size).uniform_(deadline_min,deadline_max).ceil(),
-            #         'workload': torch.FloatTensor(size).uniform_(.2, .2),
-            #         'initial_size':initial_size,
-            #         'n_agents':torch.randint(2,3,(1,1)),
-            #         'max_range':max_range,
-            #         'max_capacity':max_capacity,
-            #         'max_speed':max_speed,
-            #         'enable_capacity_constraint':enable_capacity_constraint,
-            #         'enable_range_constraint':enable_range_constraint,
-            #     }
-            #     for i in range(num_samples)
-            #
-            # ]
 
         self.size = len(self.data)
 
