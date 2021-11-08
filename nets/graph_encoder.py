@@ -963,7 +963,11 @@ class GCAPCN_K_2_P_3_L_2(nn.Module):
         self.activ = nn.LeakyReLU()
 
     def forward(self, data, mask=None):
-        X = data['loc']  # torch.cat((data['loc'], data['deadline'][:, :, None], data['workload'][:, :, None]), -1)
+        X = torch.cat(((data["task_job_mapping"].permute(0,2,1)).to(torch.float32) ,torch.div((data["task_machine_time"].permute(0,2,1)).to(torch.float32),data["task_machine_time"].max())), -1)
+        # (data["task_job_mapping"].expand(2, 100, 100) != data["task_job_mapping"].permute(0, 2, 1)).to(torch.float32)
+
+        ### make the adjacency mat4ix in the dataset
+        # X = data['loc']  # torch.cat((data['loc'], data['deadline'][:, :, None], data['workload'][:, :, None]), -1)
         # X = torch.cat((X[:, :, 0:2], (X[:, :, 2] / X[:, :, 2].max())[:, :, None]), -1)
         # X = torch.cat((data['loc'], data['deadline']), -1)
         # X_loc = X
@@ -974,17 +978,17 @@ class GCAPCN_K_2_P_3_L_2(nn.Module):
         X_loc = X
         distance_matrix = (((X_loc[:, :, None] - X_loc[:, None]) ** 2).sum(-1)) ** .5
         num_samples, num_locations, _ = X.size()
-        A = ((1 / distance_matrix) * (torch.eye(num_locations, device=distance_matrix.device).expand(
-            (num_samples, num_locations, num_locations)) - 1).to(torch.bool).to(torch.float))
-        A[A != A] = 0
-        A = A / A.max()
+        # A = ((1 / distance_matrix) * (torch.eye(num_locations, device=distance_matrix.device).expand(
+        #     (num_samples, num_locations, num_locations)) - 1).to(torch.bool).to(torch.float))
+        # A[A != A] = 0
+        A = data["adjacency"].to(torch.float32)
         D = torch.mul(torch.eye(num_locations, device=distance_matrix.device).expand((num_samples, num_locations, num_locations)),
                       (A.sum(-1) - 1)[:, None].expand((num_samples, num_locations, num_locations)))
 
         # Layer 1
 
         # p = 3
-        F0 = self.init_embed(X)
+        F0 = self.init_embed(X.to(torch.float32))
         F0_squared = torch.mul(F0[:, :, :], F0[:, :, :])
         F0_cube = torch.mul(F0[:, :, :], F0_squared[:, :, :])
 
@@ -1044,8 +1048,8 @@ class GCAPCN_K_2_P_3_L_2(nn.Module):
 
         F_final = self.activ(self.W_F(F2))
 
-        init_depot_embed = self.init_embed_depot(data['depot'])
-        h = torch.cat((init_depot_embed, F_final), 1)
+        # init_depot_embed = self.init_embed_depot(data['depot'])
+        h = F_final #torch.cat((init_depot_embed, F_final), 1)
         return (
             h,  # (batch_size, graph_size, embed_dim)
             h.mean(dim=1),  # average to get embedding of graph, (batch_size, embed_dim)

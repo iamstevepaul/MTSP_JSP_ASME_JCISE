@@ -205,7 +205,7 @@ if __name__ == "__main__":
     users_file = open("time.txt", "w")
 
     i = 6
-    model_name = 'outputs/Kool/'
+    model_name = 'output/mtsp_100/'
     # model_name = 'outputs/Kool/'
     parser = argparse.ArgumentParser()
     parser.add_argument("--datasets", nargs='+', default=["data/mrta/50_nodes_mrta.pkl"], help="Filename of the dataset(s) to evaluate")

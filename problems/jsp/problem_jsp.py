@@ -126,11 +126,14 @@ class JSPDataset(Dataset):
         else:
 
             n_samples = num_samples
-            n_tasks = 100
-            n_machines = 30
+            n_tasks = 10
+            n_machines = 3
             n_jobs = 10
             time_low = 10
             time_high = 100
+
+            # (data["task_job_mapping"].expand(2, 100, 100) != data["task_job_mapping"].permute(0, 2, 1)).to(
+            #     torch.float32)
 
 
             job_list = []
@@ -155,6 +158,26 @@ class JSPDataset(Dataset):
                 data["task_job_mapping"] = task_job_mapping
                 data["job_nums"] = job_nums
                 data["n_ops_in_jobs"] = n_ops_in_jobs
+
+                adjacency = (data["task_job_mapping"].expand(n_tasks, n_tasks) != data["task_job_mapping"].permute(1,0)).to(
+                torch.float32)
+
+
+
+                ops_nz = (torch.triu((data["task_job_mapping"].expand(n_tasks, n_tasks) == data["task_job_mapping"].permute(1,0)).to(
+                torch.float32), diagonal=1))
+
+                for j in range(n_tasks-1):
+                    sp = ops_nz[j,:].nonzero(as_tuple=True)
+                    if sp[0].size()[0] > 0:
+                        adjacency[j, sp[0][0]] = 1
+
+                
+
+                # indz = ops_nz.nonzero(as_tuple=True)
+
+                data["adjacency"] = adjacency
+
 
                 job_list.append(data)
 

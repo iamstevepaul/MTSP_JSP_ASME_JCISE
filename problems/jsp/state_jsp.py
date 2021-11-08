@@ -6,68 +6,33 @@ from utils.boolmask import mask_long2bool, mask_long_scatter
 
 class StateJSP(NamedTuple):
     # Fixed input
-    coords: torch.Tensor  # Depot + loc (coordinates of all the locations including the depot)
-    distance_matrix: torch.Tensor # distance matrix for all the coordinates
-    time_matrix: torch.Tensor # time matrix between all the coordinates using the speed of the agents
-    deadline: torch.Tensor # deadline for all the tasks (special case for the depot, keep a very large time)
-    workload: torch.Tensor
-    tasks_finish_time: torch.Tensor
-    # demand: torch.Tensor # we do not need this, we can remove this or set the demand as 1 or something equal to the quantity for 1 time delivery
+    n_tasks: torch.Tensor
+    n_machines : torch.Tensor
+    n_jobs: torch.Tensor
+    time_low : torch.Tensor
+    time_high : torch.Tensor
+    task_machine_accessibility : torch.Tensor
+    task_machine_time : torch.Tensor
+    task_job_mapping : torch.Tensor
+    job_nums : torch.Tensor
+    n_ops_in_jobs : torch.Tensor
+    adjacency : torch.Tensor
 
-    # If this state contains multiple copies (i.e. beam search) for the same instance, then for memory efficiency
-    # the coords and demands tensors are not kept multiple times, so we need to use the ids to index the correct rows.
-    ids: torch.Tensor  # Keeps track of original fixed data index of rows (this is basically the ids for all the location, which are considered as integers)
+    operations_status: torch.Tensor # takes values 0, 1, or 2
+    current_time : torch.Tensor
+    machine_taking_decision : torch.Tensor # ID of the machine taking decision
+    machines_current_operation: torch.Tensor
 
+    machine_taking_decision_operationId: torch.Tensor # ID of the operation where the machine taking a decision is currently is
+    machine_taking_decision_jobId: torch.Tensor #ID of the job where the machine taking decision is currently is
+    machines_initial_decision_sequence: torch.Tensor
 
+    machine_idle: torch.Tensor
 
-    # robot specific
-    robots_initial_decision_sequence: torch.Tensor # for timestep 1, all robots need decision, so we set a sequence for this
-    # robots_total_tasks_done # optional
-    robots_next_decision_time: torch.Tensor # tracks the next decision time for all the robots
-    robots_current_destination: torch.Tensor
-    robots_start_point: torch.Tensor
-    robots_work_capacity: torch.Tensor
-    robots_start_location: torch.Tensor
-    robots_current_destination_location: torch.Tensor
+    machines_operation_finish_time_pred: torch.Tensor # time at which the machine finishes its current job
 
-
-    #general - frequent changing variable
-    current_time: torch.Tensor # stores the value for the current time
-    robot_taking_decision: torch.Tensor  # stores the id of the robot which will take the next decision
-    next_decision_time: torch.Tensor # time at which the next decision is made. (0 t begin with)
-    previous_decision_time: torch.Tensor # time at which the previous decision was made
-
-
-    # for performance tracking
-    tasks_done_success: torch.Tensor # keeps track of all the task id which was done successfully
-    tasks_missed_deadline: torch.Tensor # keeps track of all the tasks which are visited but the deadline was missed
-    tasks_visited: torch.Tensor # keeps track of all the tasks which are visited (successful or not)
-    depot: torch.Tensor
-
-
-
-    #end
-    is_done: torch.Tensor
-
-
-    # State
-    prev_a: torch.Tensor
-    visited_: torch.Tensor  # Keeps track of nodes that have been visited
-    lengths: torch.Tensor
-    cur_coord: torch.Tensor
-    i: torch.Tensor  # Keeps track of step
-
-    # VEHICLE_CAPACITY = 1.0  # Hardcoded
-
-    n_agents : torch.Tensor
-    max_range :torch.Tensor
-    max_capacity : torch.Tensor
-    max_speed : torch.Tensor
-    enable_capacity_constraint: torch.Tensor
-    enable_range_constraint: torch.Tensor
-    n_nodes: torch.Tensor
-    initial_size: torch.Tensor
-    n_depot: torch.Tensor
+    i: torch.Tensor
+    ids: torch.Tensor
 
 
 
@@ -83,178 +48,144 @@ class StateJSP(NamedTuple):
         return (self.coords[:, :, None, :] - self.coords[:, None, :, :]).norm(p=2, dim=-1)
 
     def __getitem__(self, key):
-        if torch.is_tensor(key) or isinstance(key, slice):  # If tensor, idx all tensors by this tensor:
-            return self._replace(
-                ids=self.ids[key],
-                prev_a=self.prev_a[key],
-                visited_=self.visited_[key],
-                lengths=self.lengths[key],
-                cur_coord=self.cur_coord[key],
-            )
+        # if torch.is_tensor(key) or isinstance(key, slice):  # If tensor, idx all tensors by this tensor:
+        #     return self._replace(
+        #         ids=self.ids[key],
+        #         prev_a=self.prev_a[key],
+        #         visited_=self.visited_[key],
+        #         lengths=self.lengths[key],
+        #         cur_coord=self.cur_coord[key],
+        #     )
         return super(StateJSP, self).__getitem__(key)
 
 
     @staticmethod
     def initialize(input,
                    visited_dtype = torch.uint8):
-        depot = input['depot']
-        loc = input['loc']
-        max_speed = input['max_speed'][0].item()
-        coords = torch.cat((depot[:, :], loc), -2).to(device=loc.device)
-        distance_matrix = (coords[:, :, None, :] - coords[:, None, :, :]).norm(p=2, dim=-1).to(device=loc.device)
-        time_matrix = torch.mul(distance_matrix, (1/max_speed)).to(device=loc.device)
-        deadline = input['deadline']
-        workload = input['workload']
-        n_agents = input['n_agents'].reshape(-1)[:, None]
-        max_n_agent = input['max_n_agents'][0, 0, 0].item()
-        max_range = input['max_range'][0].item()
-        max_capacity = input['max_capacity'][0].item()
-        max_speed = input['max_speed'][0].item()
-        enable_capacity_constraint = input['enable_capacity_constraint'][0].item()
-        enable_range_constraint=input['enable_range_constraint'][0].item()
-        initial_size = input['initial_size'][0].item()
-        n_depot = input['depot'].size()[1]
-        batch_size, n_loc, _ = loc.size()
-        robots_initial_decision_sequence = torch.from_numpy(np.arange(0, max_n_agent)).expand((batch_size, max_n_agent)).to(device=loc.device)
-        robots_start_location = input['robots_start_location'] #(torch.randint(0, 101, (batch_size, max_n_agent, 2)).to(torch.float) / 100).to(device=loc.device)
+
+        n_tasks = input["n_tasks"]
+        n_machines = input["n_machines"]
+        n_jobs = input["n_jobs"]
+        time_low = input["time_low"]
+        time_high = input["time_high"]
+        task_machine_accessibility = input["task_machine_accessibility"]
+        task_machine_time = input["task_machine_time"]
+        task_job_mapping = input["task_job_mapping"]
+        job_nums = input["job_nums"]
+        n_ops_in_jobs = input["n_ops_in_jobs"]
+        adjacency = input["adjacency"]
+        n_samples = (input["n_tasks"].size())[0]
+
+        operations_status = torch.zeros((n_samples, n_tasks[0].item()+1)) # 0 for idle
+        current_time = torch.zeros((n_samples,1), dtype=torch.float32)
+        machine_taking_decision = torch.zeros((n_samples,1)).to(torch.int64)
+        machines_current_operation = torch.zeros((n_samples,n_machines[0].item())).to(torch.int64)
+        machine_taking_decision_operationId = torch.zeros((n_samples,1)).to(torch.int64)
+        machine_taking_decision_jobId = torch.zeros((n_samples,1)).to(torch.int64)
+        machines_initial_decision_sequence = torch.arange(0, n_machines[0].item())
+
+        machine_idle = torch.ones((n_samples,n_machines[0].item())).to(torch.int64)
+
+
 
 
 
         return StateJSP(
-            coords=coords,
-            ids=torch.arange(batch_size, dtype=torch.int64, device=loc.device)[:, None],  # Add steps dimension
-            prev_a=torch.zeros(batch_size, 1, dtype=torch.long, device=loc.device),
-            visited_=(  # Visited as mask is easier to understand, as long more memory efficient
-                # Keep visited_ with depot so we can scatter efficiently
-                torch.zeros(
-                    batch_size, 1, n_loc + 1,
-                    dtype=torch.uint8, device=loc.device
-                )
-                if visited_dtype == torch.uint8
-                else torch.zeros(batch_size, 1, (n_loc + 63) // 64, dtype=torch.int64, device=loc.device)  # Ceil
-            ),
-            lengths=torch.zeros(batch_size, 1, device=loc.device),
-            cur_coord=input['depot'][:, None, :],  # Add step dimension
-            i=torch.zeros(1, dtype=torch.int64, device=loc.device),  # Vector with length num_steps
-            robots_initial_decision_sequence = robots_initial_decision_sequence,
-            robots_next_decision_time =  ((robots_initial_decision_sequence > (n_agents - 1)).to(torch.float) * 10000).to(device=loc.device),
-            current_time = torch.zeros((batch_size, 1), dtype=torch.float, device=loc.device),
-            robot_taking_decision = torch.zeros((batch_size, 1), dtype=torch.int64, device=loc.device),
-            next_decision_time = torch.zeros((batch_size, 1), dtype=torch.float, device=loc.device),
-            previous_decision_time = torch.zeros((batch_size, 1), dtype=torch.float, device=loc.device),
-            tasks_done_success = torch.zeros((batch_size, 1), dtype=torch.int64, device=loc.device),
-            tasks_missed_deadline = torch.zeros((batch_size, 1), dtype=torch.int64, device=loc.device),
-            tasks_visited = torch.zeros((batch_size, 1), dtype=torch.int64, device=loc.device),
-            is_done = torch.zeros((batch_size, 1), dtype=torch.int64, device=loc.device),
-            distance_matrix = distance_matrix,
-            time_matrix = time_matrix,
-            deadline = deadline,
-            tasks_finish_time = torch.zeros((batch_size, n_loc), dtype=torch.float, device=loc.device),
-            workload=workload,
-            robots_current_destination = torch.zeros((batch_size, max_n_agent), dtype=torch.int64, device=loc.device),
-            robots_start_point = torch.zeros((batch_size, max_n_agent), dtype=torch.int64, device=loc.device),
-            robots_work_capacity= input['robots_work_capacity'],
-            robots_start_location = robots_start_location,
-            robots_current_destination_location = robots_start_location,
-            depot = torch.zeros((batch_size, 1), dtype=torch.int64, device=loc.device),
-            max_capacity = max_capacity,
-            n_agents = n_agents,
-            max_range = max_range,
-            enable_capacity_constraint = enable_capacity_constraint,
-            enable_range_constraint = enable_range_constraint,
-            n_nodes = input['loc'].size()[1],
-            initial_size = initial_size,
-            n_depot=n_depot,
-            max_speed = max_speed,
+            n_tasks = n_tasks,
+            n_machines = n_machines,
+            n_jobs = n_jobs,
+            time_low = time_low,
+            time_high = time_high,
+            task_machine_accessibility = task_machine_accessibility,
+            task_machine_time = task_machine_time,
+            task_job_mapping = task_job_mapping,
+            job_nums = job_nums,
+            n_ops_in_jobs = n_ops_in_jobs,
+            adjacency = adjacency,
+            operations_status = operations_status,
+            current_time = current_time,
+            machine_taking_decision=machine_taking_decision,
+            machines_current_operation = machines_current_operation,
+            machine_taking_decision_operationId = machine_taking_decision_operationId,
+            machine_taking_decision_jobId = machine_taking_decision_jobId,
+            machines_initial_decision_sequence = machines_initial_decision_sequence,
+            machines_operation_finish_time_pred = torch.zeros((n_samples,1)),
+            machine_idle=machine_idle,
+            ids=torch.arange(n_samples, dtype=torch.int64)[:, None],
+            i=torch.zeros(1, dtype=torch.int64),
         )
 
     def get_final_cost(self):
 
-        assert self.all_finished()
 
-        len = self.lengths + (self.coords[self.ids, 0, :] - self.cur_coord).norm(p=2, dim=-1)
         # torch.mul(len, self.)
-        return len
+        return []
 
     def update(self, selected):
         # print('************** New decision **************')
+
+        ###
+
+        # assign an operation to all machines based on accessibility and priority
+        # update the status of thpse operations to be 1
+        #update the job id for the machines
+        #update the operation id for the machines
+        #update the task finish time for the machines
+        # find the machine that finish its operation next
+        #update the current time
+        #update the status of that machine to be 2
+        #update machine_taking_decision_operationId to selected
+        # continue until all the operations status are 2
+
         selected = selected[:, None]  # Add dimension for step
-        prev_a = selected
 
-        previous_time = self.current_time
+        machine_idle = self.machine_idle
 
-        current_time = self.next_decision_time
+        current_time = self.current_time
+        operations_status = self.operations_status
+        machine_taking_decision = self.machine_taking_decision
+        machine_taking_decision_operationId = self.machine_taking_decision_operationId
+        operations_status[self.ids, machine_taking_decision_operationId] = 2
+        operations_status[self.ids, selected] = 1
 
-        # print('Current time: ', current_time[0].item())
-        # print("Agent taking decision: ", self.robot_taking_decision)
-        # print("Agent range remaining: ", robots_range_remaining[0, robot_taking_decision[0].item()].item())
+        time_to_complete = self.task_machine_time[self.ids, machine_taking_decision, selected]
+        completion_time = current_time + time_to_complete
 
-        # cur_coords = self.coords[self.ids, self.robots_current_destination[self.ids, self.robot_taking_decision]]
-        cur_coords = self.robots_current_destination_location[self.ids, self.robot_taking_decision]
-        # print(self.robots_next_decision_time)
-        # print('Selected node: ', selected)
-        # time = self.time_matrix[self.ids, self.robots_current_destination[self.ids,self.robot_taking_decision[:]], selected]
-        time = (cur_coords - self.coords[self.ids, selected]).norm(2,2)/self.max_speed
-        # worktime = torch.div(self.workload[self.ids.view(-1), selected.view(-1) - 1],
-        #                      self.robots_work_capacity[
-        #                          self.ids.view(-1), self.robot_taking_decision[self.ids].view(-1)])
-        # print('Time for journey: ', time)
-        self.robots_next_decision_time[self.ids, self.robot_taking_decision] += time # torch.add(time,worktime[:, None])
-        # print('Robots next decision time: ', self.robots_next_decision_time)
+        machines_current_operation = self.machines_current_operation
+        machines_current_operation[self.ids, machine_taking_decision] = selected
+        machine_taking_decision_operationId = selected
+
+        machines_operation_finish_time_pred = self.machines_operation_finish_time_pred
+        machines_operation_finish_time_pred[self.ids, machine_taking_decision] = completion_time
+
+        machine_taking_decision_jobId = self.machine_taking_decision_jobId
+        # machine_taking_decision_jobId = self.task_job_mapping[self.ids, :]
+
+        sorted_time, indices = torch.sort(machines_operation_finish_time_pred)
+        current_time = sorted_time[self.ids,0]
+        machine_taking_decision = indices[self.ids,0]
 
 
-        non_zero_indices = torch.nonzero(selected)
-        # print(non_zero_indices.size()[0])
-        if non_zero_indices.size()[0] > 0:
-            deadlines = self.deadline[self.ids.view(-1), selected.view(-1) - 1]
-            dest_time = self.robots_next_decision_time[self.ids.view(-1), self.robot_taking_decision[self.ids].view(-1)]
-            self.tasks_finish_time[self.ids, selected - 1] = dest_time[:, None]
 
-            feas_ids = (deadlines > dest_time).nonzero()
-            combined = torch.cat((non_zero_indices[:,0], feas_ids[:,0]))
-            uniques, counts = combined.unique(return_counts=True)
-            intersection = uniques[counts > 1]
-            if intersection.size()[0] > 0:
-                self.tasks_done_success[intersection] += 1
-            self.tasks_visited[non_zero_indices[:, 0]] += 1
-
-        self.robots_start_point[self.ids, self.robot_taking_decision] = self.robots_current_destination[
-            self.ids, self.robot_taking_decision]
-        self.robots_current_destination[self.ids, self.robot_taking_decision] = selected
-
-        sorted_time, indices = torch.sort(self.robots_next_decision_time)
-
-        if self.visited_.dtype == torch.uint8:
-            # Note: here we do not subtract one as we have to scatter so the first column allows scattering depot
-            # Add one dimension since we write a single value
-            visited_ = self.visited_.scatter(-1, prev_a[:, :, None], 1)
-        else:
-            # This works, will not set anything if prev_a -1 == -1 (depot)
-            visited_ = mask_long_scatter(self.visited_, prev_a - 1)
-
-        new_cur_coord = self.coords[self.ids, selected]
-        self.robots_current_destination_location[self.ids, self.robot_taking_decision] = new_cur_coord
-        lengths = self.lengths + (cur_coords - self.coords[self.ids, selected]).norm(2,2)
-        visited_[:,:,0] = 0
 
         return self._replace(
-            prev_a=prev_a, previous_decision_time = previous_time, current_time = current_time,
-            robot_taking_decision = indices[self.ids,0],
-            next_decision_time = sorted_time[self.ids,0],
-            visited_=visited_,
-            lengths=lengths, cur_coord=new_cur_coord,
+            current_time =current_time,
+            machine_taking_decision = machine_taking_decision.to(torch.int64),
+            machine_taking_decision_operationId = machine_taking_decision_operationId,
+            machines_current_operation =machines_current_operation,
+            operations_status = operations_status,
             i=self.i + 1
         )
 
     def all_finished(self):
         # return self.i.item() >= self.demand.size(-1) and self.visited.all()
-        return self.visited.all()
+        return ((self.operations_status == 2).to(torch.uint8)).all()
 
     def get_finished(self):
         return self.visited.sum(-1) == self.visited.size(-1)
 
     def get_current_node(self):
-        return self.robots_current_destination[self.ids, self.robot_taking_decision] #self.prev ## this has been changed
+        return self.machines_current_operation[self.ids, self.machine_taking_decision]
 
     def get_mask(self):
         """
@@ -263,18 +194,21 @@ class StateJSP(NamedTuple):
         Forbids to visit depot twice in a row, unless all nodes have been visited
         :return:
         """
-        if self.visited_.dtype == torch.uint8:
-            visited_loc = self.visited_[:, :, 1:]
-        else:
-            visited_loc = mask_long2bool(self.visited_)
-
-        mask_loc = visited_loc.to(torch.bool)  # | exceeds_cap
-
-        # robot_taking_decision = self.robot_taking_decision
-
-        # Cannot visit the depot if just visited and still unserved nodes
-        mask_depot = torch.tensor(torch.ones((mask_loc.size()[0], 1)).clone().detach(), dtype=torch.bool, device=mask_loc.device) #(self.robots_current_destination[self.ids, robot_taking_decision] == 0) & ((mask_loc == 0).int().sum(-1) > 0)
-        full_mask = torch.cat((mask_depot[:, :, None], mask_loc), -1)
+        # (self.operations_status != 0)[:, None] and self.task_machine_accessibility[self.ids, self.machine_taking_decision] == 0
+        # if self.visited_.dtype == torch.uint8:
+        #     visited_loc = self.visited_[:, :, 1:]
+        # else:
+        #     visited_loc = mask_long2bool(self.visited_)
+        #
+        # mask_loc = visited_loc.to(torch.bool)  # | exceeds_cap
+        #
+        # # robot_taking_decision = self.robot_taking_decision
+        #
+        # # Cannot visit the depot if just visited and still unserved nodes
+        # mask_depot = torch.tensor(torch.ones((mask_loc.size()[0], 1)).clone().detach(), dtype=torch.bool, device=mask_loc.device) #(self.robots_current_destination[self.ids, robot_taking_decision] == 0) & ((mask_loc == 0).int().sum(-1) > 0)
+        n_samples, n_operations = self.operations_status.size()
+        full_mask = torch.zeros((n_samples, 1, n_operations)).to(torch.bool)
+        full_mask[:, :, 1:] = torch.logical_and((self.operations_status[:,1:] != 0)[:, None], self.task_machine_accessibility[self.ids, self.machine_taking_decision] == 0)
 
         return full_mask
 

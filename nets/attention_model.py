@@ -82,7 +82,7 @@ class AttentionModel(nn.Module):
             # Embedding of last node + remaining_capacity / remaining length / remaining prize to collect
 
 
-        step_context_dim = embedding_dim + 1
+        step_context_dim = 25#embedding_dim + 1
 
 
         node_dim = 2# x, y, demand / prize
@@ -93,7 +93,7 @@ class AttentionModel(nn.Module):
 
 
 
-            step_context_dim_new = embedding_dim + embedding_dim
+            step_context_dim_new = 25#embedding_dim + embedding_dim
 
         # Special embedding projection for depot node
         self.init_embed_depot = nn.Linear(2, embedding_dim)
@@ -116,7 +116,7 @@ class AttentionModel(nn.Module):
 
         self.embedder = GCAPCN_K_2_P_3_L_2(
                     n_dim=embedding_dim,
-                    node_dim=2
+                    node_dim=4
                 )
 
         # encoder_n = 4
@@ -529,7 +529,7 @@ class AttentionModel(nn.Module):
 
         # Compute query = context node embedding
         query = fixed.context_node_projected + \
-                self.project_step_context(self._get_parallel_step_context(fixed.node_embeddings, state)) ### this has to be cross checked for the context inputs
+                self.project_step_context(self._get_parallel_step_context(fixed.node_embeddings, state))[:, None] ### this has to be cross checked for the context inputs
 
         # Compute keys and values for the nodes
         glimpse_K, glimpse_V, logit_K = self._get_attention_node_data(fixed, state)
@@ -557,20 +557,18 @@ class AttentionModel(nn.Module):
         """
 
         current_node = state.get_current_node()
-        batch_size, num_steps = current_node.size()
             # Embedding of previous node + remaining capacity
-
-        robots_current_destination = state.robots_current_destination.clone()
-
-        working_robots = ((state.robots_initial_decision_sequence <= (state.n_agents - 1)).to(torch.float)).to(device=robots_current_destination.device)
-
-        current_robot_states = state.robots_current_destination_location * working_robots[:, :, None]
-        decision_robot_state = state.robots_current_destination_location[state.ids, state.robot_taking_decision].view(batch_size,-1)#torch.cat((state.robots_current_destination_location[state.ids, state.robot_taking_decision].view(batch_size,-1)),-1) # add depot info here??
+        accessible_operations = state.task_machine_accessibility[state.ids,state.machine_taking_decision]
+        batch_size, _, n_op = accessible_operations.size()
+        accessible_operations = accessible_operations.reshape((batch_size, n_op))
+        operations_status = state.operations_status
+        macines_current_operations = state.machines_current_operation
 
 
-        robots_states_embedding = self.robots_state_query_embed(current_robot_states).sum(-2)
-        decision_robot_state_embedding = self.robot_taking_decision_query(decision_robot_state)
-        return torch.cat((decision_robot_state_embedding[:,None], robots_states_embedding[:,None]),-1)
+
+
+
+        return torch.cat((current_node.to(torch.float32), accessible_operations.to(torch.float32), operations_status.to(torch.float32), macines_current_operations.to(torch.float32)), -1)
 
 
 
@@ -605,8 +603,8 @@ class AttentionModel(nn.Module):
         logits = torch.matmul(final_Q, logit_K.transpose(-2, -1)).squeeze(-2) / math.sqrt(final_Q.size(-1))
 
         # From the logits compute the probabilities by clipping, masking and softmax
-        if self.tanh_clipping > 0:
-            logits = torch.tanh(logits) * self.tanh_clipping
+        # if self.tanh_clipping > 0:
+        #     logits = torch.tanh(logits) * self.tanh_clipping
         if self.mask_logits:
             logits[mask] = -math.inf
 
