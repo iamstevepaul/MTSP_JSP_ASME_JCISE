@@ -19,6 +19,8 @@ class StateJSP(NamedTuple):
     adjacency : torch.Tensor
 
     operations_status: torch.Tensor # takes values 0, 1, or 2
+    operations_availability: torch.Tensor
+    operations_next: torch.Tensor
     current_time : torch.Tensor
     machine_taking_decision : torch.Tensor # ID of the machine taking decision
     machines_current_operation: torch.Tensor
@@ -26,6 +28,8 @@ class StateJSP(NamedTuple):
     machine_taking_decision_operationId: torch.Tensor # ID of the operation where the machine taking a decision is currently is
     machine_taking_decision_jobId: torch.Tensor #ID of the job where the machine taking decision is currently is
     machines_initial_decision_sequence: torch.Tensor
+
+    operations_machines_assignment: torch.Tensor
 
     machine_idle: torch.Tensor
 
@@ -76,13 +80,14 @@ class StateJSP(NamedTuple):
         adjacency = input["adjacency"]
         n_samples = (input["n_tasks"].size())[0]
 
-        operations_status = torch.zeros((n_samples, n_tasks[0].item()+1)) # 0 for idle
+        operations_status = torch.zeros((n_samples, n_tasks[0].item())) # 0 for idle
         current_time = torch.zeros((n_samples,1), dtype=torch.float32)
         machine_taking_decision = torch.zeros((n_samples,1)).to(torch.int64)
         machines_current_operation = torch.zeros((n_samples,n_machines[0].item())).to(torch.int64)
         machine_taking_decision_operationId = torch.zeros((n_samples,1)).to(torch.int64)
         machine_taking_decision_jobId = torch.zeros((n_samples,1)).to(torch.int64)
         machines_initial_decision_sequence = torch.arange(0, n_machines[0].item())
+        operations_machines_assignment = torch.zeros((n_samples, n_machines[0].item(), n_tasks[0].item()))
 
         machine_idle = torch.ones((n_samples,n_machines[0].item())).to(torch.int64)
 
@@ -103,13 +108,16 @@ class StateJSP(NamedTuple):
             n_ops_in_jobs = n_ops_in_jobs,
             adjacency = adjacency,
             operations_status = operations_status,
+            operations_next = input["operations_next"],
+            operations_availability = input["operations_availability"],
             current_time = current_time,
             machine_taking_decision=machine_taking_decision,
             machines_current_operation = machines_current_operation,
             machine_taking_decision_operationId = machine_taking_decision_operationId,
             machine_taking_decision_jobId = machine_taking_decision_jobId,
             machines_initial_decision_sequence = machines_initial_decision_sequence,
-            machines_operation_finish_time_pred = torch.zeros((n_samples,1)),
+            machines_operation_finish_time_pred = torch.zeros((n_samples, n_machines[0].item(), n_tasks[0].item()))+10000,
+            operations_machines_assignment = operations_machines_assignment,
             machine_idle=machine_idle,
             ids=torch.arange(n_samples, dtype=torch.int64)[:, None],
             i=torch.zeros(1, dtype=torch.int64),
@@ -124,56 +132,48 @@ class StateJSP(NamedTuple):
     def update(self, selected):
         # print('************** New decision **************')
 
-        ###
 
-        # assign an operation to all machines based on accessibility and priority
-        # update the status of thpse operations to be 1
-        #update the job id for the machines
-        #update the operation id for the machines
-        #update the task finish time for the machines
-        # find the machine that finish its operation next
-        #update the current time
-        #update the status of that machine to be 2
-        #update machine_taking_decision_operationId to selected
-        # continue until all the operations status are 2
+        action = ((self.machine_idle[:,:,None]*selected)*self.operations_availability[:,None,:])*((self.operations_status ==0).to(torch.int64)[:,None,:])
 
-        selected = selected[:, None]  # Add dimension for step
 
-        machine_idle = self.machine_idle
+        operations_machines_assignment = self.operations_machines_assignment
+
+        operations_machines_assignment = operations_machines_assignment + action
+
+        new_task_time = (self.task_machine_time + self.current_time[:, None]) * action
+
+        machines_operation_finish_time_pred = (self.machines_operation_finish_time_pred * torch.bitwise_not(action.to(torch.bool)).to(torch.int64)) + new_task_time
+
+        min_task_index = machines_operation_finish_time_pred.min(dim=2).indices[:,0]
+        min_machine_index = (machines_operation_finish_time_pred.min(dim=2).values).min(dim=1).indices
+
+        new_min_time = (machines_operation_finish_time_pred.min(dim=2).values).min(dim=1).values[:, None]
+        operations_machines_assignment[self.ids.view(-1), min_machine_index, min_task_index] = 2
 
         current_time = self.current_time
+
+        machines_idle = self.machine_idle
         operations_status = self.operations_status
-        machine_taking_decision = self.machine_taking_decision
-        machine_taking_decision_operationId = self.machine_taking_decision_operationId
-        operations_status[self.ids, machine_taking_decision_operationId] = 2
-        operations_status[self.ids, selected] = 1
+        operations_availability = self.operations_availability
 
-        time_to_complete = self.task_machine_time[self.ids, machine_taking_decision, selected]
-        completion_time = current_time + time_to_complete
 
-        machines_current_operation = self.machines_current_operation
-        machines_current_operation[self.ids, machine_taking_decision] = selected
-        machine_taking_decision_operationId = selected
+        machines_idle[self.ids.view(-1), min_machine_index] = 1
+        operations_status[self.ids.view(-1), min_machine_index] = 2
+        operations_availability[self.ids.view(-1), min_machine_index] = 0
 
-        machines_operation_finish_time_pred = self.machines_operation_finish_time_pred
-        machines_operation_finish_time_pred[self.ids, machine_taking_decision] = completion_time
+        current_time = new_min_time
 
-        machine_taking_decision_jobId = self.machine_taking_decision_jobId
-        # machine_taking_decision_jobId = self.task_job_mapping[self.ids, :]
-
-        sorted_time, indices = torch.sort(machines_operation_finish_time_pred)
-        current_time = sorted_time[self.ids,0]
-        machine_taking_decision = indices[self.ids,0]
 
 
 
 
         return self._replace(
             current_time =current_time,
-            machine_taking_decision = machine_taking_decision.to(torch.int64),
-            machine_taking_decision_operationId = machine_taking_decision_operationId,
-            machines_current_operation =machines_current_operation,
+            operations_machines_assignment=operations_machines_assignment,
             operations_status = operations_status,
+            machines_operation_finish_time_pred=machines_operation_finish_time_pred,
+            machine_idle=machines_idle,
+            operations_availability=operations_availability,
             i=self.i + 1
         )
 

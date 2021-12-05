@@ -82,7 +82,7 @@ class AttentionModel(nn.Module):
             # Embedding of last node + remaining_capacity / remaining length / remaining prize to collect
 
 
-        step_context_dim = 25#embedding_dim + 1
+        step_context_dim = 30#embedding_dim + 1
 
 
         node_dim = 2# x, y, demand / prize
@@ -93,7 +93,7 @@ class AttentionModel(nn.Module):
 
 
 
-            step_context_dim_new = 25#embedding_dim + embedding_dim
+            step_context_dim_new = 30#embedding_dim + embedding_dim
 
         # Special embedding projection for depot node
         self.init_embed_depot = nn.Linear(2, embedding_dim)
@@ -114,7 +114,7 @@ class AttentionModel(nn.Module):
         #     node_dim=2
         # )
 
-        self.embedder = GCAPCN_K_2_P_3_L_2(
+        self.embedder = GCAPCN_K_2_P_2_L_1(
                     n_dim=embedding_dim,
                     node_dim=4
                 )
@@ -420,10 +420,12 @@ class AttentionModel(nn.Module):
             log_p, mask = self._get_log_p(fixed, state)
 
             # Select the indices of the next nodes in the sequences, result (batch_size) long
-            selected = self._select_node(log_p.exp()[:, 0, :], mask[:, 0, :])  # Squeeze out steps dimension
+            # selected = self._select_node(log_p.exp()[:, 0, :], mask[:, 0, :])  # Squeeze out steps dimension
             # print(selected[0].item(), state.robot_taking_decision[0])
+            prob = log_p.exp()
+            action = torch.bitwise_and((prob > 0.5), (prob == (prob.max(dim=1).values[:,None,:]))).to(torch.int64)
 
-            state = state.update(selected)
+            state = state.update(action)
 
 
             # Now make log_p, selected desired output size by 'unshrinking'
@@ -437,7 +439,7 @@ class AttentionModel(nn.Module):
 
             # Collect output of step
             outputs.append(log_p[:, 0, :])
-            sequences.append(selected)
+            sequences.append(action)
             # print(state.all_finished().item() == 0)
 
             i += 1
@@ -528,14 +530,17 @@ class AttentionModel(nn.Module):
     def _get_log_p(self, fixed, state, normalize=True):
 
         # Compute query = context node embedding
-        query = fixed.context_node_projected + \
-                self.project_step_context(self._get_parallel_step_context(fixed.node_embeddings, state))[:, None] ### this has to be cross checked for the context inputs
+        # query = fixed.context_node_projected + \
+        #         self.project_step_context(self._get_parallel_step_context(fixed.node_embeddings, state)) ### this has to be cross checked for the context inputs
+
+        query = self.project_step_context(self._get_parallel_step_context(fixed.node_embeddings, state))
 
         # Compute keys and values for the nodes
         glimpse_K, glimpse_V, logit_K = self._get_attention_node_data(fixed, state)
 
         # Compute the mask
-        mask = state.get_mask()
+        # mask = state.get_mask()
+        mask = []
 
         # Compute logits (unnormalized log_p)
         log_p, glimpse = self._one_to_many_logits(query, glimpse_K, glimpse_V, logit_K, mask)
@@ -543,6 +548,8 @@ class AttentionModel(nn.Module):
             log_p = torch.log_softmax(log_p / self.temp, dim=-1)
 
         assert not torch.isnan(log_p).any()
+
+        # need to do masking  here
 
         return log_p, mask
 
@@ -556,19 +563,17 @@ class AttentionModel(nn.Module):
         :return: (batch_size, num_steps, context_dim)
         """
 
-        current_node = state.get_current_node()
             # Embedding of previous node + remaining capacity
-        accessible_operations = state.task_machine_accessibility[state.ids,state.machine_taking_decision]
-        batch_size, _, n_op = accessible_operations.size()
-        accessible_operations = accessible_operations.reshape((batch_size, n_op))
+        accessible_operations = state.task_machine_accessibility
+        batch_size, n_machines, n_op = accessible_operations.size()
         operations_status = state.operations_status
-        macines_current_operations = state.machines_current_operation
+        operations_availability = state.operations_availability
 
 
 
 
 
-        return torch.cat((current_node.to(torch.float32), accessible_operations.to(torch.float32), operations_status.to(torch.float32), macines_current_operations.to(torch.float32)), -1)
+        return torch.cat((accessible_operations.to(torch.float32), operations_status.to(torch.float32)[:,None,:].expand(batch_size, n_machines, n_op), operations_availability[:,None,:].expand(batch_size, n_machines, n_op)), -1)
 
 
 
@@ -584,9 +589,9 @@ class AttentionModel(nn.Module):
 
         # Batch matrix multiplication to compute compatibilities (n_heads, batch_size, num_steps, graph_size)
         compatibility = torch.matmul(glimpse_Q, glimpse_K.transpose(-2, -1)) / math.sqrt(glimpse_Q.size(-1))
-        if self.mask_inner:
-            assert self.mask_logits, "Cannot mask inner without masking logits"
-            compatibility[mask[None, :, :, None, :].expand_as(compatibility)] = -math.inf
+        # if self.mask_inner:
+        #     assert self.mask_logits, "Cannot mask inner without masking logits"
+        #     compatibility[mask[None, :, :, None, :].expand_as(compatibility)] = -math.inf
 
         # Batch matrix multiplication to compute heads (n_heads, batch_size, num_steps, val_size)
         heads = torch.matmul(torch.softmax(compatibility, dim=-1), glimpse_V)
@@ -605,8 +610,8 @@ class AttentionModel(nn.Module):
         # From the logits compute the probabilities by clipping, masking and softmax
         # if self.tanh_clipping > 0:
         #     logits = torch.tanh(logits) * self.tanh_clipping
-        if self.mask_logits:
-            logits[mask] = -math.inf
+        # if self.mask_logits:
+        #     logits[mask] = -math.inf
 
         return logits, glimpse.squeeze(-2)
 

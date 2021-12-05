@@ -128,7 +128,7 @@ class JSPDataset(Dataset):
             n_samples = num_samples
             n_tasks = 10
             n_machines = 3
-            n_jobs = 10
+            n_jobs = 4
             time_low = 10
             time_high = 100
 
@@ -146,6 +146,7 @@ class JSPDataset(Dataset):
                 job_nums = torch.arange(1, n_jobs + 1)
 
                 n_ops_in_jobs = (task_job_mapping.expand((n_jobs, n_tasks)).T == job_nums).to(torch.float32).sum(0)
+                operations_availability = torch.zeros((n_tasks)).to(torch.float32)
 
                 data = {}
                 data["n_tasks"] = n_tasks
@@ -167,16 +168,25 @@ class JSPDataset(Dataset):
                 ops_nz = (torch.triu((data["task_job_mapping"].expand(n_tasks, n_tasks) == data["task_job_mapping"].permute(1,0)).to(
                 torch.float32), diagonal=1))
 
+                operations_next = torch.zeros((n_tasks,1)).to(torch.float32)
+
                 for j in range(n_tasks-1):
                     sp = ops_nz[j,:].nonzero(as_tuple=True)
+                    if task_job_mapping[0,j] not in task_job_mapping[0,0:j]:
+                        operations_availability[j] = 1
                     if sp[0].size()[0] > 0:
-                        adjacency[j, sp[0][0]] = 1
+                        operations_next[j,0] = sp[0][0]
+                        for el in sp[0]:
+                            adjacency[j, el] = 1
 
                 
 
                 # indz = ops_nz.nonzero(as_tuple=True)
 
                 data["adjacency"] = adjacency
+                data["operations_next"] = operations_next
+                data["operations_availability"] = operations_availability
+
 
 
                 job_list.append(data)

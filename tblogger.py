@@ -8,7 +8,7 @@ from tensorboard import program
 
 
 # tracking_address = "logger/R1_6"
-tracking_address = "logger/R1_MLP_1"
+tracking_address = "logger/PPO2_non_linear_time_latest/PPO2_36"
 
 if __name__ == "__main__":
     tb = program.TensorBoard()
