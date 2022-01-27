@@ -28,6 +28,7 @@ class StateJSP(NamedTuple):
     machine_taking_decision_operationId: torch.Tensor # ID of the operation where the machine taking a decision is currently is
     machine_taking_decision_jobId: torch.Tensor #ID of the job where the machine taking decision is currently is
     machines_initial_decision_sequence: torch.Tensor
+    machine_status: torch.Tensor
 
     operations_machines_assignment: torch.Tensor
 
@@ -80,7 +81,7 @@ class StateJSP(NamedTuple):
         adjacency = input["adjacency"]
         n_samples = (input["n_tasks"].size())[0]
 
-        operations_status = torch.zeros((n_samples, n_tasks[0].item())) # 0 for idle
+        operations_status = torch.zeros((n_samples, n_tasks[0].item()))
         current_time = torch.zeros((n_samples,1), dtype=torch.float32)
         machine_taking_decision = torch.zeros((n_samples,1)).to(torch.int64)
         machines_current_operation = torch.zeros((n_samples,n_machines[0].item())).to(torch.int64)
@@ -88,6 +89,7 @@ class StateJSP(NamedTuple):
         machine_taking_decision_jobId = torch.zeros((n_samples,1)).to(torch.int64)
         machines_initial_decision_sequence = torch.arange(0, n_machines[0].item())
         operations_machines_assignment = torch.zeros((n_samples, n_machines[0].item(), n_tasks[0].item()))
+        machine_status = input["machine_status"]
 
         machine_idle = torch.ones((n_samples,n_machines[0].item())).to(torch.int64)
 
@@ -116,8 +118,9 @@ class StateJSP(NamedTuple):
             machine_taking_decision_operationId = machine_taking_decision_operationId,
             machine_taking_decision_jobId = machine_taking_decision_jobId,
             machines_initial_decision_sequence = machines_initial_decision_sequence,
-            machines_operation_finish_time_pred = torch.zeros((n_samples, n_machines[0].item(), n_tasks[0].item()))+10000,
+            machines_operation_finish_time_pred = torch.zeros((n_samples, n_machines[0].item())),
             operations_machines_assignment = operations_machines_assignment,
+            machine_status=machine_status,
             machine_idle=machine_idle,
             ids=torch.arange(n_samples, dtype=torch.int64)[:, None],
             i=torch.zeros(1, dtype=torch.int64),
@@ -130,50 +133,69 @@ class StateJSP(NamedTuple):
         return []
 
     def update(self, selected):
-        # print('************** New decision **************')
+        # print('************** New decision **************') #check after 3rd iteration
 
-
-        action = ((self.machine_idle[:,:,None]*selected)*self.operations_availability[:,None,:])*((self.operations_status ==0).to(torch.int64)[:,None,:])
-
-
-        operations_machines_assignment = self.operations_machines_assignment
-
-        operations_machines_assignment = operations_machines_assignment + action
-
-        new_task_time = (self.task_machine_time + self.current_time[:, None]) * action
-
-        machines_operation_finish_time_pred = (self.machines_operation_finish_time_pred * torch.bitwise_not(action.to(torch.bool)).to(torch.int64)) + new_task_time
-
-        min_task_index = machines_operation_finish_time_pred.min(dim=2).indices[:,0]
-        min_machine_index = (machines_operation_finish_time_pred.min(dim=2).values).min(dim=1).indices
-
-        new_min_time = (machines_operation_finish_time_pred.min(dim=2).values).min(dim=1).values[:, None]
-        operations_machines_assignment[self.ids.view(-1), min_machine_index, min_task_index] = 2
-
+        ids_wait = ((selected[:,1] == 0).nonzero()).squeeze(dim=1)
+        ids_non_wait = ((selected[:,1] != 0).nonzero()).squeeze(dim=1)
+        machine_selected = selected[:, 0]
+        task_selected = selected[:, 1]
+        # machine selected and action
         current_time = self.current_time
-
-        machines_idle = self.machine_idle
         operations_status = self.operations_status
+        machine_status = self.machine_status
+        machines_operation_finish_time_pred = self.machines_operation_finish_time_pred
+        machines_current_operation = self.machines_current_operation
         operations_availability = self.operations_availability
+        machines_current_operation[self.ids.squeeze(), machine_selected] = task_selected
+        if ids_wait.size()[0] > 0:
+            machine_status[ids_wait, machine_selected[ids_wait]] = 1 #status setting as waiting
 
+        if ids_non_wait.size()[0] > 0:
+            machine_status[ids_non_wait, machine_selected[ids_non_wait]] = 2 # status changed as occupied
 
-        machines_idle[self.ids.view(-1), min_machine_index] = 1
-        operations_status[self.ids.view(-1), min_machine_index] = 2
-        operations_availability[self.ids.view(-1), min_machine_index] = 0
+            time_for_operation = self.task_machine_time[ids_non_wait, machine_selected[ids_non_wait], task_selected[ids_non_wait]]
+            finish_time_prediction = current_time[ids_non_wait] + time_for_operation.unsqueeze(dim=1)
 
-        current_time = new_min_time
+            machines_operation_finish_time_pred[ids_non_wait, machine_selected[ids_non_wait]] = finish_time_prediction.squeeze(dim=1)
+            operations_availability[ids_non_wait,task_selected[ids_non_wait]] = 0 # making the task no longer available for other machines
+            operations_status[ids_non_wait, task_selected[ids_non_wait]-1] = 1 #1 for engaged
 
+        # ids_with_idle = (machine_status == 0).nonzero()
+
+        ids_with_no_idle = (machine_status.squeeze().prod(dim=1) != 0).nonzero().squeeze(dim=1) # prod is used to detect the presence of 0 in dimension 1
+        if ids_with_no_idle.size()[0] > 0:
+            #find ids with 2 as min update 1s - need to make sure atleast one machine is working while there is availabiltty
+
+            ids_with_atleast_one_occupied = ((machine_status[ids_with_no_idle,:] == 1).to(torch.float32).squeeze(dim=2).prod(dim=1) == 0).nonzero().squeeze(dim=1)
+            ids_with_atleast_one_occupied = ids_with_no_idle[ids_with_atleast_one_occupied]
+            if ids_with_atleast_one_occupied.size()[0] > 0:
+            # finding the min time for operating mchines
+                next_time_data = ((machine_status[ids_with_atleast_one_occupied,:] == 1).to(torch.float32).squeeze(dim=2) * 1000000 + machines_operation_finish_time_pred[ids_with_atleast_one_occupied,:]).min(dim=1)
+                current_time[ids_with_atleast_one_occupied] = next_time_data.values.unsqueeze(dim=1)
+                min_task_index = next_time_data.indices
+                machine_status[ids_with_atleast_one_occupied, min_task_index] = 1
+                finished_operations = machines_current_operation[ids_with_atleast_one_occupied, min_task_index]
+                operations_status[ids_with_atleast_one_occupied, finished_operations-1] = 2 # 2 for finished
+                operations_availability[ids_with_atleast_one_occupied, finished_operations] = 0
+
+                ids_next_not_idle = (self.operations_next[ids_with_atleast_one_occupied, finished_operations-1, 0].to(torch.int64) !=0).nonzero().squeeze(dim=1)
+                # ids_next_not_idle = ids_with_atleast_one_occupied[ids_next_not_idle]
+                if ids_next_not_idle.size()[0] > 0:
+                    operations_availability[ids_with_atleast_one_occupied[ids_next_not_idle], self.operations_next[ids_with_atleast_one_occupied[ids_next_not_idle], finished_operations[ids_next_not_idle]-1, 0].to(torch.int64)] = 1
+
+                machines_operation_finish_time_pred[ids_with_atleast_one_occupied] = ((machine_status[ids_with_atleast_one_occupied] == 2).to(torch.float32).squeeze() * machines_operation_finish_time_pred[
+                    ids_with_atleast_one_occupied]) + ((machine_status[ids_with_atleast_one_occupied] == 1).to(torch.float32).squeeze() * next_time_data.values.unsqueeze(dim=1))
 
 
 
 
         return self._replace(
             current_time =current_time,
-            operations_machines_assignment=operations_machines_assignment,
             operations_status = operations_status,
             machines_operation_finish_time_pred=machines_operation_finish_time_pred,
-            machine_idle=machines_idle,
             operations_availability=operations_availability,
+            machine_status = machine_status,
+            machines_current_operation = machines_current_operation,
             i=self.i + 1
         )
 

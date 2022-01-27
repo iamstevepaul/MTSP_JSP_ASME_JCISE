@@ -881,28 +881,16 @@ class GCAPCN_K_2_P_2_L_1(nn.Module):
 
     def forward(self, data, mask=None):
         X = torch.cat(((data["task_job_mapping"].permute(0, 2, 1)).to(torch.float32),
-                       torch.div((data["task_machine_time"].permute(0, 2, 1)).to(torch.float32),
-                                 data["task_machine_time"].max())), -1)
-        # (data["task_job_mapping"].expand(2, 100, 100) != data["task_job_mapping"].permute(0, 2, 1)).to(torch.float32)
+                       torch.div((data["task_machine_time"][:,:,1:].permute(0, 2, 1)).to(torch.float32),
+                                 data["task_machine_time"][:,:,1:].max())), -1)
 
-        ### make the adjacency mat4ix in the dataset
-        # X = data['loc']  # torch.cat((data['loc'], data['deadline'][:, :, None], data['workload'][:, :, None]), -1)
-        # X = torch.cat((X[:, :, 0:2], (X[:, :, 2] / X[:, :, 2].max())[:, :, None]), -1)
-        # X = torch.cat((data['loc'], data['deadline']), -1)
         # X_loc = X
-
-        # X = torch.cat((data['loc'], data['deadline'][:, :, None], data['workload'][:, :, None]), -1)
-        # X = torch.cat((X[:, :, 0:2], (X[:, :, 2] / X[:, :, 2].max())[:, :, None]), -1)
-        # X = torch.cat((data['loc'], data['deadline']), -1)
-        X_loc = X
-        distance_matrix = (((X_loc[:, :, None] - X_loc[:, None]) ** 2).sum(-1)) ** .5
+        # distance_matrix = (((X_loc[:, :, None] - X_loc[:, None]) ** 2).sum(-1)) ** .5
         num_samples, num_locations, _ = X.size()
-        # A = ((1 / distance_matrix) * (torch.eye(num_locations, device=distance_matrix.device).expand(
-        #     (num_samples, num_locations, num_locations)) - 1).to(torch.bool).to(torch.float))
-        # A[A != A] = 0
+
         A = data["adjacency"].to(torch.float32)
         D = torch.mul(
-            torch.eye(num_locations, device=distance_matrix.device).expand((num_samples, num_locations, num_locations)),
+            torch.eye(num_locations, device=X.device).expand((num_samples, num_locations, num_locations)),
             (A.sum(-1) - 1)[:, None].expand((num_samples, num_locations, num_locations)))
 
         # Layer 1

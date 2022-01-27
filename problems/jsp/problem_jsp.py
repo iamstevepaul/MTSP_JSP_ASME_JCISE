@@ -1,3 +1,5 @@
+import math
+
 from torch.utils.data import Dataset
 import torch
 import os
@@ -127,7 +129,7 @@ class JSPDataset(Dataset):
 
             n_samples = num_samples
             n_tasks = 10
-            n_machines = 3
+            n_machines = 4
             n_jobs = 4
             time_low = 10
             time_high = 100
@@ -140,13 +142,30 @@ class JSPDataset(Dataset):
 
             for i in range(n_samples):
                 task_machine_accessibility = torch.randint(0, 2, (n_machines, n_tasks))
+                for i in range(n_tasks):
+                    task_machine_accessibility[:,i] = torch.randint(0, 2, (1, n_machines))
+                    if task_machine_accessibility[:,i].max() == 0:
+                        task_machine_accessibility[torch.randint(0, n_machines, (1,)),i] = 1
+                #first job will be waiting with index 0
+                task_machine_accessibility = torch.cat(
+                    (torch.ones((n_machines, 1), dtype=torch.int64), task_machine_accessibility), dim=1)
+
                 task_machine_time = torch.randint(time_low, time_high + 1,
-                                                  (n_machines, n_tasks)) * task_machine_accessibility
-                task_job_mapping = torch.randint(1, n_jobs + 1, (1, n_tasks))
+                                                  (n_machines, n_tasks+1)) * task_machine_accessibility
+                task_machine_time[:,0] = 0
+
+                task_job_mapping = torch.randint(1, n_jobs + 1, (1, n_tasks)) #wait not considered
+
+
                 job_nums = torch.arange(1, n_jobs + 1)
 
-                n_ops_in_jobs = (task_job_mapping.expand((n_jobs, n_tasks)).T == job_nums).to(torch.float32).sum(0)
+                n_ops_in_jobs = (task_job_mapping.expand((n_jobs, n_tasks)).T == job_nums).to(torch.float32).sum(0) #wait not considered
                 operations_availability = torch.zeros((n_tasks)).to(torch.float32)
+
+                # 0-idle, 1-wait, 2- engaged, 4- done (no more operations available)
+                machine_status = torch.zeros((n_machines,1))
+
+
 
                 data = {}
                 data["n_tasks"] = n_tasks
@@ -159,10 +178,10 @@ class JSPDataset(Dataset):
                 data["task_job_mapping"] = task_job_mapping
                 data["job_nums"] = job_nums
                 data["n_ops_in_jobs"] = n_ops_in_jobs
+                data["machine_status"] = machine_status
 
                 adjacency = (data["task_job_mapping"].expand(n_tasks, n_tasks) != data["task_job_mapping"].permute(1,0)).to(
                 torch.float32)
-
 
 
                 ops_nz = (torch.triu((data["task_job_mapping"].expand(n_tasks, n_tasks) == data["task_job_mapping"].permute(1,0)).to(
@@ -175,16 +194,18 @@ class JSPDataset(Dataset):
                     if task_job_mapping[0,j] not in task_job_mapping[0,0:j]:
                         operations_availability[j] = 1
                     if sp[0].size()[0] > 0:
-                        operations_next[j,0] = sp[0][0]
+                        operations_next[j,0] = sp[0][0] + 1
                         for el in sp[0]:
                             adjacency[j, el] = 1
+
+                operations_availability = torch.cat((torch.ones((1), dtype=torch.float32), operations_availability), dim=0)
 
                 
 
                 # indz = ops_nz.nonzero(as_tuple=True)
 
-                data["adjacency"] = adjacency
-                data["operations_next"] = operations_next
+                data["adjacency"] = adjacency #wait not considered
+                data["operations_next"] = operations_next #wait not considered
                 data["operations_availability"] = operations_availability
 
 

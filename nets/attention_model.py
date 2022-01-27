@@ -213,7 +213,7 @@ class AttentionModel(nn.Module):
             import time
             # start_time = time.time()
             # embeddings, _ = self.embedder(self._init_embed(input))
-            embeddings, _ = self.embedder(input)
+            embeddings, _ = [], []#self.embedder(input)
             # end_time = time.time() - start_time
 
         _log_p, pi, cost = self._inner(input, embeddings)
@@ -299,6 +299,22 @@ class AttentionModel(nn.Module):
             1
         )
         # TSP
+
+    def get_action(self, state):
+        # state.machine_status[0,1,0]=1
+        # (state.machine_status == 0).to(torch.int64).argmax(dim=0)
+        if state.i <4:
+            machines_selected = (
+                        (state.machine_status == 0).to(torch.int64) * torch.rand(state.machine_status.shape)).argmax(
+                dim=1)
+        else:
+
+            machines_selected = ((state.machine_status != 2).to(torch.int64)*torch.rand(state.machine_status.shape)).argmax(dim=1)
+        selected_machine_operation_accessibility = state.task_machine_accessibility[state.ids.squeeze(), machines_selected.squeeze(),:]
+        operations_Avail = (selected_machine_operation_accessibility*state.operations_availability)
+        operations_selected = (operations_Avail*torch.rand(state.operations_availability.shape)).argmax(dim=1).unsqueeze(dim=1)
+
+        return torch.cat((machines_selected, operations_selected), dim=1)
 
     def _inner_eval(self, input, embeddings):
 
@@ -389,7 +405,7 @@ class AttentionModel(nn.Module):
 
         state = self.problem.make_state(input)
         # Compute keys, values for the glimpse and keys for the logits once as they can be reused in every step
-        fixed = self._precompute(embeddings)
+        fixed = []#self._precompute(embeddings)
 
         batch_size = state.ids.size(0)
 
@@ -401,7 +417,7 @@ class AttentionModel(nn.Module):
         # print(state.visited_.all().item())
 
         #initial tasks
-        while not (self.shrink_size is None and not (state.all_finished().item() == 0)):
+        while not (self.shrink_size is None and not (state.all_finished().item() == 0) or state.i == 100):
 
             if self.shrink_size is not None:
                 unfinished = torch.nonzero(state.get_finished() == 0)
@@ -417,40 +433,38 @@ class AttentionModel(nn.Module):
 
             # Only the required ones goes here, so we should
             #  We need a variable that track which all tasks are available
-            log_p, mask = self._get_log_p(fixed, state)
+            # log_p, mask = self._get_log_p(fixed, state)
 
             # Select the indices of the next nodes in the sequences, result (batch_size) long
             # selected = self._select_node(log_p.exp()[:, 0, :], mask[:, 0, :])  # Squeeze out steps dimension
             # print(selected[0].item(), state.robot_taking_decision[0])
-            prob = log_p.exp()
-            action = torch.bitwise_and((prob > 0.5), (prob == (prob.max(dim=1).values[:,None,:]))).to(torch.int64)
+            # prob = log_p.exp()
+            # action = torch.bitwise_and((prob > 0.5), (prob == (prob.max(dim=1).values[:,None,:]))).to(torch.int64)
 
-            state = state.update(action)
+            actions = self.get_action(state)
+
+            state = state.update(actions)
 
 
-            # Now make log_p, selected desired output size by 'unshrinking'
-            if self.shrink_size is not None and state.ids.size(0) < batch_size:
-                log_p_, selected_ = log_p, selected
-                log_p = log_p_.new_zeros(batch_size, *log_p_.size()[1:])
-                selected = selected_.new_zeros(batch_size)
+            # # Now make log_p, selected desired output size by 'unshrinking'
+            # if self.shrink_size is not None and state.ids.size(0) < batch_size:
+            #     log_p_, selected_ = log_p, selected
+            #     log_p = log_p_.new_zeros(batch_size, *log_p_.size()[1:])
+            #     selected = selected_.new_zeros(batch_size)
 
-                log_p[state.ids[:, 0]] = log_p_
-                selected[state.ids[:, 0]] = selected_
+                # log_p[state.ids[:, 0]] = log_p_
+                # selected[state.ids[:, 0]] = selected_
 
             # Collect output of step
-            outputs.append(log_p[:, 0, :])
-            sequences.append(action)
+            # outputs.append(log_p[:, 0, :])
+            sequences.append(actions)
             # print(state.all_finished().item() == 0)
 
             i += 1
         # print(state.tasks_done_success, cost)
         # Collected lists, return Tensor
-        # print(state.tasks_done_success)
-        # cost =  state.n_agents/state.tasks_done_success.to(torch.float) #(1 - torch.div(state.tasks_done_success, float(state.n_nodes)))*float(state.n_nodes)* state.n_agents
-        # cost = torch.div(state.tasks_finish_time, state.deadline).sum(-1) #((state.tasks_finish_time - state.deadline)*(state.tasks_finish_time > state.deadline).to(torch.float)).sum(-1)
-        # cost = state.lengths/((2**.5)*state.n_nodes) #(torch.div(state.tasks_finish_time, state.deadline)*(torch.div(state.tasks_finish_time, state.deadline) > 1).to(torch.int64)).sum(-1)
-        mk = state.robots_next_decision_time + (state.robots_current_destination_location - state.coords[:,0,:][:,None]).norm(2,2)/state.max_speed
-        cost = ((mk < mk.max()).to(torch.float32)*mk).max(1)[0][:, None]/state.n_agents
+
+        cost = state.current_time # makespan #((mk < mk.max()).to(torch.float32)*mk).max(1)[0][:, None]/state.n_agents
 
         # d = torch.div(state.lengths, float(state.n_nodes) * 1.414)
         # u = (r == 0).double()
