@@ -67,7 +67,7 @@ class StateJSP(NamedTuple):
     @staticmethod
     def initialize(input,
                    visited_dtype = torch.uint8):
-
+        device = input["n_tasks"].device
         n_tasks = input["n_tasks"]
         n_machines = input["n_machines"]
         n_jobs = input["n_jobs"]
@@ -81,17 +81,17 @@ class StateJSP(NamedTuple):
         adjacency = input["adjacency"]
         n_samples = (input["n_tasks"].size())[0]
 
-        operations_status = torch.zeros((n_samples, n_tasks[0].item()))
-        current_time = torch.zeros((n_samples,1), dtype=torch.float32)
-        machine_taking_decision = torch.zeros((n_samples,1)).to(torch.int64)
-        machines_current_operation = torch.zeros((n_samples,n_machines[0].item())).to(torch.int64)
-        machine_taking_decision_operationId = torch.zeros((n_samples,1)).to(torch.int64)
-        machine_taking_decision_jobId = torch.zeros((n_samples,1)).to(torch.int64)
-        machines_initial_decision_sequence = torch.arange(0, n_machines[0].item())
-        operations_machines_assignment = torch.zeros((n_samples, n_machines[0].item(), n_tasks[0].item()))
+        operations_status = torch.zeros((n_samples, n_tasks[0].item()), device=device)
+        current_time = torch.zeros((n_samples,1), dtype=torch.float32, device=device)
+        machine_taking_decision = torch.zeros((n_samples,1), device=device).to(torch.int64)
+        machines_current_operation = torch.zeros((n_samples,n_machines[0].item()), device=device).to(torch.int64)
+        machine_taking_decision_operationId = torch.zeros((n_samples,1), device=device).to(torch.int64)
+        machine_taking_decision_jobId = torch.zeros((n_samples,1), device=device).to(torch.int64)
+        machines_initial_decision_sequence = torch.arange(0, n_machines[0].item(), device=device)
+        operations_machines_assignment = torch.zeros((n_samples, n_machines[0].item(), n_tasks[0].item()), device=device)
         machine_status = input["machine_status"]
 
-        machine_idle = torch.ones((n_samples,n_machines[0].item())).to(torch.int64)
+        machine_idle = torch.ones((n_samples,n_machines[0].item()), device=device).to(torch.int64)
 
 
 
@@ -113,17 +113,17 @@ class StateJSP(NamedTuple):
             operations_next = input["operations_next"],
             operations_availability = input["operations_availability"],
             current_time = current_time,
-            machine_taking_decision=machine_taking_decision,
+            machine_taking_decision=machine_taking_decision, ### can be removed
             machines_current_operation = machines_current_operation,
-            machine_taking_decision_operationId = machine_taking_decision_operationId,
-            machine_taking_decision_jobId = machine_taking_decision_jobId,
-            machines_initial_decision_sequence = machines_initial_decision_sequence,
-            machines_operation_finish_time_pred = torch.zeros((n_samples, n_machines[0].item())),
+            machine_taking_decision_operationId = machine_taking_decision_operationId, ### can be removed
+            machine_taking_decision_jobId = machine_taking_decision_jobId, ### can be removed
+            machines_initial_decision_sequence = machines_initial_decision_sequence, ### can be removed
+            machines_operation_finish_time_pred = torch.zeros((n_samples, n_machines[0].item()), device=device),
             operations_machines_assignment = operations_machines_assignment,
             machine_status=machine_status,
-            machine_idle=machine_idle,
-            ids=torch.arange(n_samples, dtype=torch.int64)[:, None],
-            i=torch.zeros(1, dtype=torch.int64),
+            machine_idle=machine_idle, ### can be removed
+            ids=torch.arange(n_samples, dtype=torch.int64, device=device)[:, None],
+            i=torch.zeros(1, dtype=torch.int64, device=device),
         )
 
     def get_final_cost(self):

@@ -5,6 +5,7 @@ Date: 11/29/21 """
 
 from tensorboard import default
 from tensorboard import program
+from stable_baselines3 import PPO
 
 
 tracking_address = "logger/R1_6"

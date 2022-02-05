@@ -93,106 +93,39 @@ class AttentionModel(nn.Module):
 
 
 
-            step_context_dim_new = 30#embedding_dim + embedding_dim
+            step_context_dim_new = embedding_dim#embedding_dim + embedding_dim
 
         # Special embedding projection for depot node
         self.init_embed_depot = nn.Linear(2, embedding_dim)
 
         self.init_embed = nn.Linear(node_dim, embedding_dim)
+        n_machines = 6
+        n_tasks = 20
 
-
-
-        # self.embedder = GraphAttentionEncoder(
-        #     n_heads=n_heads,
-        #     embed_dim=embedding_dim,
-        #     n_layers=self.n_encode_layers,
-        #     normalization=normalization
-        # ) ## this will be changed for CCN
-
-        # self.embedder = CCN(
-        #     embed_dim=embedding_dim,
-        #     node_dim=2
-        # )
 
         self.embedder = GCAPCN_K_2_P_2_L_1(
                     n_dim=embedding_dim,
-                    node_dim=4
+                    node_dim=n_machines+1
                 )
 
-        # encoder_n = 4
-        #
-        # if encoder_n == 1:
-        #
-        #     self.embedder = GCAPCN_K_1_P_2_L_3(
-        #         n_dim=embedding_dim,
-        #         node_dim=3
-        #     )
-        # elif encoder_n == 2:
-        #
-        #     self.embedder = GCAPCN_K_1_P_2_L_2(
-        #         n_dim=embedding_dim,
-        #         node_dim=3
-        #     )
-        # elif encoder_n == 3:
-        #
-        #     self.embedder = GCAPCN_K_1_P_2_L_1(
-        #         n_dim=embedding_dim,
-        #         node_dim=3
-        #     )
-        # elif encoder_n == 4:
-        #
-        #     self.embedder = GCAPCN_K_2_P_3_L_1(
-        #         n_dim=embedding_dim,
-        #         node_dim=3
-        #     )
-        # elif encoder_n == 5:
-        #
-        #     self.embedder = GCAPCN_K_2_P_2_L_1(
-        #         n_dim=embedding_dim,
-        #         node_dim=3
-        #     )
-        # elif encoder_n == 6:
-        #
-        #     self.embedder = GCAPCN_K_3_P_1_L_1(
-        #         n_dim=embedding_dim,
-        #         node_dim=3
-        #     )
-        # elif encoder_n == 7:
-        #
-        #     self.embedder = GCAPCN_K_2_P_1_L_1(
-        #         n_dim=embedding_dim,
-        #         node_dim=3
-        #     )
-        # elif encoder_n == 8:
-        #
-        #     self.embedder = GCAPCN_K_1_P_1_L_1(
-        #         n_dim=embedding_dim,
-        #         node_dim=3
-        #     )
-        # elif encoder_n == 9:
-        #     self.embedder = GCAPCN_K_2_P_3_L_2(
-        #         n_dim=embedding_dim,
-        #         node_dim=3
-        #     )
-        # elif encoder_n == 10:
-        #     self.embedder = GraphAttentionEncoder(
-        #         n_heads=n_heads,
-        #         embed_dim=embedding_dim,
-        #         n_layers=self.n_encode_layers,
-        #         normalization=normalization
-        #     ) ## this will be changed for CCN
-
-        # self.embedder = GCAPCN_K_3_P_4_L_2()
-
-
         # For each node we compute (glimpse key, glimpse value, logit key) so 3 * embedding_dim
-        self.project_node_embeddings = nn.Linear(embedding_dim, 3 * embedding_dim, bias=False)
-        self.project_fixed_context = nn.Linear(embedding_dim, embedding_dim, bias=False)
+        self.project_node_embeddings_task = nn.Linear(embedding_dim, 3 * embedding_dim, bias=False)
+        self.project_fixed_context_task = nn.Linear(embedding_dim, embedding_dim, bias=False)
+        self.project_node_embeddings_machine = nn.Linear(embedding_dim, 3 * embedding_dim, bias=False)
+        self.project_fixed_context_machine = nn.Linear(embedding_dim, embedding_dim, bias=False)
+
         self.project_step_context = nn.Linear(step_context_dim_new, embedding_dim, bias=False)
         self.project_context_cur_loc = nn.Linear(2, embedding_dim, bias=False)
         assert embedding_dim % n_heads == 0
         # Note n_heads * val_dim == embedding_dim so input to project_out is embedding_dim
-        self.project_out = nn.Linear(embedding_dim, embedding_dim, bias=False)
+        self.project_out_machine = nn.Linear(embedding_dim, embedding_dim, bias=False)
+        self.project_out_task = nn.Linear(embedding_dim, embedding_dim, bias=False)
+        self.state_embedding = nn.Linear(2*(n_tasks+n_machines)+1, embedding_dim)
+        self.machine_encoding = nn.Linear(2*(n_tasks+1), embedding_dim)
+        self.machine_context_encoding = nn.Linear(2*embedding_dim, embedding_dim)
+
+        wait_encoding = [nn.Linear(2*embedding_dim, 2*embedding_dim),nn.Linear(2*embedding_dim, 2*embedding_dim),nn.Linear(2*embedding_dim, embedding_dim)]
+        self.machine_wait_encoding = nn.Sequential(*wait_encoding)
 
     def set_decode_type(self, decode_type, temp=None):
         self.decode_type = decode_type
@@ -213,15 +146,15 @@ class AttentionModel(nn.Module):
             import time
             # start_time = time.time()
             # embeddings, _ = self.embedder(self._init_embed(input))
-            embeddings, _ = [], []#self.embedder(input)
+            embeddings, _ = self.embedder(input)
             # end_time = time.time() - start_time
 
-        _log_p, pi, cost = self._inner(input, embeddings)
+        _log_p_machine, _log_p_task, pi, cost = self._inner(input, embeddings)
         # cos, mask = self.problem.get_costs(input, pi)
         mask = None
         # Log likelyhood is calculated within the model since returning it per action does not work well with
         # DataParallel since sequences can be of different lengths
-        ll = self._calc_log_likelihood(_log_p, pi, mask)
+        ll = self._calc_log_likelihood(_log_p_machine, _log_p_task, pi, mask)
         if return_pi:
             return cost, ll, pi
 
@@ -266,11 +199,12 @@ class AttentionModel(nn.Module):
 
         return flat_parent[feas_ind], flat_action[feas_ind], flat_score[feas_ind]
 
-    def _calc_log_likelihood(self, _log_p, a, mask):
+    def _calc_log_likelihood(self, _log_p_machine, _log_p_task, a, mask):
 
         # Get log_p corresponding to selected actions
-        log_p = _log_p.gather(2, a.unsqueeze(-1)).squeeze(-1)
-
+        _log_p_machine = _log_p_machine.gather(2, a[:,:,0].unsqueeze(-1)).squeeze(-1)
+        _log_p_task = _log_p_task.gather(2, a[:,:, 1].unsqueeze(-1)).squeeze(-1)
+        log_p = _log_p_machine + _log_p_task
         # Optional: mask out actions irrelevant to objective so they do not get reinforced
         if mask is not None:
             log_p[mask] = 0
@@ -396,18 +330,30 @@ class AttentionModel(nn.Module):
 
         return torch.stack(outputs, 1), torch.stack(sequences, 1), cost, state.tasks_done_success.tolist()
 
+    def get_current_state_encoding(self, current_state):
+        vec = torch.cat((current_state.machines_current_operation.to(torch.float32),current_state.operations_status, current_state.operations_availability,
+                         current_state.machines_operation_finish_time_pred),1)
+        return self.state_embedding(vec)
+
+    def get_machine_encoding(self, current_state):
+        return self.machine_encoding(torch.cat((current_state.task_machine_accessibility.to(torch.float32) ,current_state.task_machine_time.to(torch.float32)), 2))
+
 
 
     def _inner(self, input, embeddings):
 
-        outputs = []
+        outputs_machine = []
+        outputs_task = []
         sequences = []
 
         state = self.problem.make_state(input)
         # Compute keys, values for the glimpse and keys for the logits once as they can be reused in every step
-        fixed = []#self._precompute(embeddings)
+
 
         batch_size = state.ids.size(0)
+
+        machine_encodings = self.get_machine_encoding(state)
+        fixed_machine = self._precompute(machine_encodings,entity="machine")
 
 
         # Perform decoding steps
@@ -423,25 +369,40 @@ class AttentionModel(nn.Module):
                 unfinished = torch.nonzero(state.get_finished() == 0)
                 if len(unfinished) == 0:
                     break
-                unfinished = unfinished[:, 0]
+                # unfinished = unfinished[:, 0]
                 # Check if we can shrink by at least shrink_size and if this leaves at least 16
                 # (otherwise batch norm will not work well and it is inefficient anyway)
-                if 16 <= len(unfinished) <= state.ids.size(0) - self.shrink_size:
-                    # Filter states
-                    state = state[unfinished]
-                    fixed = fixed[unfinished]
+                # if 16 <= len(unfinished) <= state.ids.size(0) - self.shrink_size:
+                #     # Filter states
+                #     state = state[unfinished]
+                #     fixed = fixed[unfinished]
 
             # Only the required ones goes here, so we should
             #  We need a variable that track which all tasks are available
-            # log_p, mask = self._get_log_p(fixed, state)
+            current_state_encoding = self.get_current_state_encoding(state).unsqueeze(dim=1)
+
+            entity = 'machine'
+            log_p_machine, machine_mask = self._get_log_p(fixed_machine, state, query=current_state_encoding, entity=entity)
 
             # Select the indices of the next nodes in the sequences, result (batch_size) long
-            # selected = self._select_node(log_p.exp()[:, 0, :], mask[:, 0, :])  # Squeeze out steps dimension
-            # print(selected[0].item(), state.robot_taking_decision[0])
-            # prob = log_p.exp()
-            # action = torch.bitwise_and((prob > 0.5), (prob == (prob.max(dim=1).values[:,None,:]))).to(torch.int64)
+            machine_selected = self._select_node(log_p_machine.exp()[:, 0, :], machine_mask[:, 0, :])  # Squeeze out steps dimension
+            selected_machine_encodings = machine_encodings[state.ids.squeeze(), machine_selected].unsqueeze(dim=1)
 
-            actions = self.get_action(state)
+            task_selection_context = self.machine_context_encoding(torch.cat((current_state_encoding, selected_machine_encodings), 2))
+            waitng_embedding = self.machine_wait_encoding(torch.cat((current_state_encoding, selected_machine_encodings), 2))
+            full_task_encoding = torch.cat((waitng_embedding, embeddings),1)
+            fixed_task = self._precompute(full_task_encoding, entity="task")
+
+            entity = 'task'
+            log_p_task, task_mask = self._get_log_p(fixed_task, state, query=task_selection_context,
+                                                          entity=entity, machine_selected=machine_selected)
+
+            task_selected = self._select_node(log_p_task.exp()[:, 0, :], task_mask[:, 0, :])
+
+
+
+
+            actions = torch.cat((machine_selected[:,None], task_selected[:,None]),1)
 
             state = state.update(actions)
 
@@ -456,21 +417,20 @@ class AttentionModel(nn.Module):
                 # selected[state.ids[:, 0]] = selected_
 
             # Collect output of step
-            # outputs.append(log_p[:, 0, :])
+            outputs_machine.append(log_p_machine[:, 0, :])
+            outputs_task.append(log_p_task[:, 0, :])
             sequences.append(actions)
             # print(state.all_finished().item() == 0)
-
             i += 1
         # print(state.tasks_done_success, cost)
         # Collected lists, return Tensor
 
-        cost = state.current_time # makespan #((mk < mk.max()).to(torch.float32)*mk).max(1)[0][:, None]/state.n_agents
+        # nor = (state.task_machine_time.permute(0, 2, 1)[:, 1:, :] == 0)*1000 + (state.task_machine_time.permute(0, 2, 1))[:, 1:, :]
+        worst = state.task_machine_time.permute(0, 2, 1)[:, 1:, :].max(dim=2).values.sum(dim=1).unsqueeze(dim=1)
+        cost = torch.div(state.current_time, worst) + ((state.operations_status != 2).to(torch.float32).sum(dim=1) * 1000).unsqueeze(dim=1) # makespan #((mk < mk.max()).to(torch.float32)*mk).max(1)[0][:, None]/state.n_agents
 
-        # d = torch.div(state.lengths, float(state.n_nodes) * 1.414)
-        # u = (r == 0).double()
-        # cost = r - torch.mul(u, torch.exp(-d))
-        # cost = cost * state.n_agents
-        return torch.stack(outputs, 1), torch.stack(sequences, 1), cost
+
+        return torch.stack(outputs_machine, 1),  torch.stack(outputs_task, 1), torch.stack(sequences, 1), cost
 
     def sample_many(self, input, batch_rep=1, iter_rep=1):
         """
@@ -509,16 +469,23 @@ class AttentionModel(nn.Module):
             assert False, "Unknown decode type"
         return selected
 
-    def _precompute(self, embeddings, num_steps=1):
+    def _precompute(self, embeddings, num_steps=1, entity="task"):
 
         # The fixed context projection of the graph embedding is calculated only once for efficiency
         graph_embed = embeddings.mean(1)
         # fixed context = (batch_size, 1, embed_dim) to make broadcastable with parallel timesteps
-        fixed_context = self.project_fixed_context(graph_embed)[:, None, :]
+        if entity=="task":
+            fixed_context = self.project_fixed_context_task(graph_embed)[:, None, :]
+        else:
+            fixed_context = self.project_fixed_context_task(graph_embed)[:, None, :]
 
         # The projection of the node embeddings for the attention is calculated once up front
-        glimpse_key_fixed, glimpse_val_fixed, logit_key_fixed = \
-            self.project_node_embeddings(embeddings[:, None, :, :]).chunk(3, dim=-1)
+        if entity == "machine":
+            glimpse_key_fixed, glimpse_val_fixed, logit_key_fixed = \
+                self.project_node_embeddings_machine(embeddings[:, None, :, :]).chunk(3, dim=-1)
+        else:
+            glimpse_key_fixed, glimpse_val_fixed, logit_key_fixed = \
+                self.project_node_embeddings_machine(embeddings[:, None, :, :]).chunk(3, dim=-1)
 
         # No need to rearrange key for logit as there is a single head
         fixed_attention_node_data = (
@@ -541,25 +508,50 @@ class AttentionModel(nn.Module):
             torch.arange(log_p.size(-1), device=log_p.device, dtype=torch.int64).repeat(log_p.size(0), 1)[:, None, :]
         )
 
-    def _get_log_p(self, fixed, state, normalize=True):
+    def _get_log_p(self, fixed, state, query:torch.Tensor, normalize=True, entity = 'machine', machine_selected=None):
 
         # Compute query = context node embedding
         # query = fixed.context_node_projected + \
         #         self.project_step_context(self._get_parallel_step_context(fixed.node_embeddings, state)) ### this has to be cross checked for the context inputs
 
-        query = self.project_step_context(self._get_parallel_step_context(fixed.node_embeddings, state))
+        # query = self.project_step_context(query)
 
         # Compute keys and values for the nodes
         glimpse_K, glimpse_V, logit_K = self._get_attention_node_data(fixed, state)
 
         # Compute the mask
         # mask = state.get_mask()
-        mask = []
+        if entity == "machine":
+            if state.i < state.n_machines[0]:
+                mask = (state.machine_status != 0).permute(0, 2, 1)
+            else:
+                ids_with_all_wait = (state.machine_status.squeeze().prod(dim=1) == 1).nonzero().squeeze(dim=1)
+                mask = (state.machine_status == 2).permute(0,2,1)
+                if ids_with_all_wait.size()[0] > 0:
+                    #masking machines with nothing available to them
+                    m1 = (state.task_machine_accessibility[ids_with_all_wait,:,1:]*state.operations_availability[ids_with_all_wait,None,1:].expand(state.task_machine_accessibility[ids_with_all_wait,:,1:].shape)).sum(dim=2).unsqueeze(dim=1) == 0
+                    # m2 = (state.machine_status[ids_with_all_wait,:,:] == 2).permute(0,2,1)
+                    mask[ids_with_all_wait,:,:] = m1# torch.bitwise_or(m1,m2)
+                ids_with_not_all_wait = (state.machine_status.squeeze().prod(dim=1) != 1).nonzero().squeeze(dim=1)
+                if ids_with_not_all_wait.size()[0] > 0: # ids with not all wait, mask machine with status 2
+                    mask[ids_with_not_all_wait,:,:] = (state.machine_status[ids_with_not_all_wait, :, :] == 2).permute(0, 2, 1)
+        else:
+            selected_machine_operation_accessibility = state.task_machine_accessibility[state.ids.squeeze(),
+                                                       machine_selected.squeeze(), :]
+            m1 = (selected_machine_operation_accessibility * state.operations_availability).unsqueeze(dim=1) == 0
+            mask = (selected_machine_operation_accessibility * state.operations_availability).unsqueeze(dim=1) == 0
+
+            ids_not_all_unavailable = ((m1.squeeze(dim=1).to(torch.float32)[:, 1:]).sum(dim=1) < state.n_tasks).nonzero().squeeze(dim=1)
+            if ids_not_all_unavailable.size()[0] > 0: # if atelast one non wait task is there, then set mask wait
+                mask[ids_not_all_unavailable,0,0] = True
 
         # Compute logits (unnormalized log_p)
-        log_p, glimpse = self._one_to_many_logits(query, glimpse_K, glimpse_V, logit_K, mask)
+        log_p, glimpse = self._one_to_many_logits(query, glimpse_K, glimpse_V, logit_K, mask, entity)
         if normalize:
             log_p = torch.log_softmax(log_p / self.temp, dim=-1)
+
+        if torch.isnan(log_p).any():
+            dt = 0
 
         assert not torch.isnan(log_p).any()
 
@@ -593,7 +585,7 @@ class AttentionModel(nn.Module):
 
 
 
-    def _one_to_many_logits(self, query, glimpse_K, glimpse_V, logit_K, mask):
+    def _one_to_many_logits(self, query, glimpse_K, glimpse_V, logit_K, mask, entity = 'machine'):
 
         batch_size, num_steps, embed_dim = query.size()
         key_size = val_size = embed_dim // self.n_heads
@@ -611,8 +603,12 @@ class AttentionModel(nn.Module):
         heads = torch.matmul(torch.softmax(compatibility, dim=-1), glimpse_V)
 
         # Project to get glimpse/updated context node embedding (batch_size, num_steps, embedding_dim)
-        glimpse = self.project_out(
-            heads.permute(1, 2, 3, 0, 4).contiguous().view(-1, num_steps, 1, self.n_heads * val_size))
+        if entity == 'machine':
+            glimpse = self.project_out_machine(
+                heads.permute(1, 2, 3, 0, 4).contiguous().view(-1, num_steps, 1, self.n_heads * val_size))
+        else:
+            glimpse = self.project_out_task(
+                heads.permute(1, 2, 3, 0, 4).contiguous().view(-1, num_steps, 1, self.n_heads * val_size))
 
         # Now projecting the glimpse is not needed since this can be absorbed into project_out
         # final_Q = self.project_glimpse(glimpse)
@@ -624,8 +620,8 @@ class AttentionModel(nn.Module):
         # From the logits compute the probabilities by clipping, masking and softmax
         # if self.tanh_clipping > 0:
         #     logits = torch.tanh(logits) * self.tanh_clipping
-        # if self.mask_logits:
-        #     logits[mask] = -math.inf
+        if self.mask_logits:
+            logits[mask] = -math.inf
 
         return logits, glimpse.squeeze(-2)
 

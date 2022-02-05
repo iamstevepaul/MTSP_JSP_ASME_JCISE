@@ -9,6 +9,7 @@ from problems.jsp.state_jsp import StateJSP
 from utils.beam_search import beam_search
 
 
+
 class JSP(object):
 
     NAME = 'mrta'  # Capacitated Vehicle Routing Problem
@@ -128,8 +129,8 @@ class JSPDataset(Dataset):
         else:
 
             n_samples = num_samples
-            n_tasks = 10
-            n_machines = 4
+            n_tasks = 20
+            n_machines = 6
             n_jobs = 4
             time_low = 10
             time_high = 100
@@ -189,7 +190,7 @@ class JSPDataset(Dataset):
 
                 operations_next = torch.zeros((n_tasks,1)).to(torch.float32)
 
-                for j in range(n_tasks-1):
+                for j in range(n_tasks):
                     sp = ops_nz[j,:].nonzero(as_tuple=True)
                     if task_job_mapping[0,j] not in task_job_mapping[0,0:j]:
                         operations_availability[j] = 1

@@ -12,8 +12,8 @@ def get_options(args=None):
     parser.add_argument('--problem', default='jsp', help="The problem to solve, default 'tsp'")
     parser.add_argument('--graph_size', type=int, default=100, help="The size of the problem graph")
     parser.add_argument('--initial_size', type=int, default=150, help="The size of the problem graph when the simulation starts")
-    parser.add_argument('--batch_size', type=int, default=2, help="Number of instances per batch during training") # changed
-    parser.add_argument('--epoch_size', type=int, default=10, help="Number of instances per epoch during training") # changed
+    parser.add_argument('--batch_size', type=int, default=200, help="Number of instances per batch during training") # changed
+    parser.add_argument('--epoch_size', type=int, default=10000, help="Number of instances per epoch during training") # changed
     parser.add_argument('--n_agents', type=int, default=50, help="Number of robots")
     parser.add_argument('--n_depot', type=int, default=1, help="Number of depot")
     parser.add_argument('--agent_max_range', type=int, default=4, help="Max range for the robot")
@@ -26,9 +26,9 @@ def get_options(args=None):
     parser.add_argument('--deadline_max', type=int, default=550,
                         help="Max value for deadline")
 
-    parser.add_argument('--val_size', type=int, default=50, # changed
+    parser.add_argument('--val_size', type=int, default=1000, # changed
                         help='Number of instances used for reporting validation performance')
-    parser.add_argument('--eval_batch_size', type=int, default=25,  ## changed
+    parser.add_argument('--eval_batch_size', type=int, default=100,  ## changed
                         help="Batch size to use during (baseline) evaluation")
     parser.add_argument('--val_dataset', type=str, default=None, help='Dataset file to use for validation')
 
@@ -57,7 +57,7 @@ def get_options(args=None):
                         help='Exponential moving average baseline decay (default 0.8)')
     parser.add_argument('--baseline', default='rollout',
                         help="Baseline to use: 'rollout', 'critic' or 'exponential'. Defaults to no baseline.")
-    parser.add_argument('--bl_alpha', type=float, default=0.05,
+    parser.add_argument('--bl_alpha', type=float, default=0.4,
                         help='Significance in the t-test for updating rollout baseline')
     parser.add_argument('--bl_warmup_epochs', type=int, default=None,
                         help='Number of epochs to warmup the baseline, default None means 1 for rollout (exponential '
