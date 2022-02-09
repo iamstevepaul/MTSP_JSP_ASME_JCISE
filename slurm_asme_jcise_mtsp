@@ -5,10 +5,10 @@
 #SBATCH --partition=hal
 #SBATCH --qos=hal
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:1
-#SBATCH --job-name="mtsp_stevepau_fa"
-#SBATCH --output=output_mtsp_fa.out
-#SBATCH --error=error_mtsp_fa.err
+#SBATCH --gres=gpu:2
+#SBATCH --job-name="jsp_stevepau_fa"
+#SBATCH --output=output_jsp_fa.out
+#SBATCH --error=error_jsp_fa.err
 #SBATCH --mail-user=stevepau@buffalo.edu
 #SBATCH --mail-type=END
 #SBATCH --exclusive
@@ -32,11 +32,11 @@ ulimit -s unlimited
 #export I_MPI_FABRICS_LIST=tcp
 #source activate py27-mpi
 eval "$(/util/common/python/py37/anaconda-2020.02/bin/conda shell.bash hook)"
-conda activate pytorch-1.5-dgl
+#conda activate pytorch-1.5-dgl
+conda activate /projects/academic/soumacho/steve/conda_envs/jsp
 #conda install -p /home/stevepau tqdm
 #conda activate tqdm
-#
-CUDA_VISIBLE_DEVICES=0
+CUDA_VISIBLE_DEVICES=0,1
 python run.py
 
 echo "***********************************************************************"
@@ -44,3 +44,4 @@ echo "***********************************************************************"
 
 #
 echo "All Done!"
+

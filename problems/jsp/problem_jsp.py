@@ -156,6 +156,8 @@ class JSPDataset(Dataset):
                 task_machine_time[:,0] = 0
 
                 task_job_mapping = torch.randint(1, n_jobs + 1, (1, n_tasks)) #wait not considered
+                while task_job_mapping.unique().shape[0] != n_jobs:
+                    task_job_mapping = torch.randint(1, n_jobs + 1, (1, n_tasks))
 
 
                 job_nums = torch.arange(1, n_jobs + 1)

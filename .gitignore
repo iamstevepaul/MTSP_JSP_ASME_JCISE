@@ -127,6 +127,9 @@ results/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+outputs/
+Data/
+ORTOOLS/
 
 # Pyre type checker
 .pyre/

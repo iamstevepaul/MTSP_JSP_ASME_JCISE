@@ -12,8 +12,8 @@ def get_options(args=None):
     parser.add_argument('--problem', default='jsp', help="The problem to solve, default 'tsp'")
     parser.add_argument('--graph_size', type=int, default=100, help="The size of the problem graph")
     parser.add_argument('--initial_size', type=int, default=150, help="The size of the problem graph when the simulation starts")
-    parser.add_argument('--batch_size', type=int, default=200, help="Number of instances per batch during training") # changed
-    parser.add_argument('--epoch_size', type=int, default=10000, help="Number of instances per epoch during training") # changed
+    parser.add_argument('--batch_size', type=int, default=1000, help="Number of instances per batch during training") # changed
+    parser.add_argument('--epoch_size', type=int, default=200000, help="Number of instances per epoch during training") # changed
     parser.add_argument('--n_agents', type=int, default=50, help="Number of robots")
     parser.add_argument('--n_depot', type=int, default=1, help="Number of depot")
     parser.add_argument('--agent_max_range', type=int, default=4, help="Max range for the robot")
@@ -28,7 +28,7 @@ def get_options(args=None):
 
     parser.add_argument('--val_size', type=int, default=1000, # changed
                         help='Number of instances used for reporting validation performance')
-    parser.add_argument('--eval_batch_size', type=int, default=100,  ## changed
+    parser.add_argument('--eval_batch_size', type=int, default=500,  ## changed
                         help="Batch size to use during (baseline) evaluation")
     parser.add_argument('--val_dataset', type=str, default=None, help='Dataset file to use for validation')
 
@@ -42,6 +42,8 @@ def get_options(args=None):
                         help='Clip the parameters to within +- this value using tanh. '
                              'Set to 0 to not perform any clipping.')
     parser.add_argument('--normalization', default='batch', help="Normalization type, 'batch' (default) or 'instance'")
+
+
 
     # Training
     parser.add_argument('--lr_model', type=float, default=1e-4, help="Set the learning rate for the actor network")
