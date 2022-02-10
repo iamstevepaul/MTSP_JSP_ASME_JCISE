@@ -99,8 +99,8 @@ class AttentionModel(nn.Module):
         self.init_embed_depot = nn.Linear(2, embedding_dim)
 
         self.init_embed = nn.Linear(node_dim, embedding_dim)
-        n_machines = 6
-        n_tasks = 20
+        n_machines = 20
+        n_tasks = 100
 
 
         self.embedder = GCAPCN_K_2_P_2_L_1(
@@ -250,86 +250,6 @@ class AttentionModel(nn.Module):
 
         return torch.cat((machines_selected, operations_selected), dim=1)
 
-    def _inner_eval(self, input, embeddings):
-
-        outputs = []
-        sequences = []
-
-        state = self.problem.make_state(input)
-        # Compute keys, values for the glimpse and keys for the logits once as they can be reused in every step
-        fixed = self._precompute(embeddings)
-
-        batch_size = state.ids.size(0)
-
-        # Perform decoding steps
-        i = 0
-        # print(state.visited_)
-        # print(state.all_finished().item())
-        # print(state.visited_.all().item())
-        time_sl = []
-        while not (self.shrink_size is None and not (state.all_finished().item() == 0)):
-            start_time = time.time()
-
-            if self.shrink_size is not None:
-                unfinished = torch.nonzero(state.get_finished() == 0)
-                if len(unfinished) == 0:
-                    break
-                unfinished = unfinished[:, 0]
-                # Check if we can shrink by at least shrink_size and if this leaves at least 16
-                # (otherwise batch norm will not work well and it is inefficient anyway)
-                if 16 <= len(unfinished) <= state.ids.size(0) - self.shrink_size:
-                    # Filter states
-                    state = state[unfinished]
-                    fixed = fixed[unfinished]
-
-            log_p, mask = self._get_log_p(fixed, state)
-
-            # Select the indices of the next nodes in the sequences, result (batch_size) long
-            selected = self._select_node(log_p.exp()[:, 0, :], mask[:, 0, :])  # Squeeze out steps dimension
-            # print(selected[0].item(), state.robot_taking_decision[0])
-            end_time1 = time.time() - start_time
-            state = state.update(selected)
-            start_time2 = time.time()
-            # cost = torch.div(state.lengths, state.tasks_done_success)
-            # cost = torch.mul(1 - torch.div(state.tasks_done_success, float(state.n_nodes)), 0.8) + torch.mul(
-            #     torch.div(state.lengths, float(state.n_nodes) * 1.414), 0.2)
-            # Now make log_p, selected desired output size by 'unshrinking'
-            if self.shrink_size is not None and state.ids.size(0) < batch_size:
-                log_p_, selected_ = log_p, selected
-                log_p = log_p_.new_zeros(batch_size, *log_p_.size()[1:])
-                selected = selected_.new_zeros(batch_size)
-
-                log_p[state.ids[:, 0]] = log_p_
-                selected[state.ids[:, 0]] = selected_
-
-            # Collect output of step
-            outputs.append(log_p[:, 0, :])
-            sequences.append(selected)
-            # print(state.all_finished().item() == 0)
-
-            i += 1
-            end_time2 = time.time() - start_time2
-            time_sl.append(end_time1+end_time2)
-        # print(state.tasks_done_success, cost)
-        # Collected lists, return Tensor
-        # r = 1 - torch.div(state.tasks_done_success, float(state.n_nodes))
-        # d = torch.div(state.lengths, float(state.n_nodes) * 1.414)
-        # u = (r == 0).double()
-        # cost = r - torch.mul(u, torch.exp(-d))
-        #
-        # r = 1 - torch.div(state.tasks_done_success, float(state.n_nodes))
-        # d = torch.div(state.lengths, float(state.n_nodes) * 1.414)
-        # u = (r == 0).double()
-        # cost = r - torch.mul(u, torch.exp(-d))
-        import numpy as np
-        total_decision_time = np.array(time_sl).sum()
-        users_file = open("time.txt", "a")
-        users_file.write(str(total_decision_time) + ',' + '\n')
-        users_file.close()
-        cost = (torch.div(state.tasks_finish_time, state.deadline)*(torch.div(state.tasks_finish_time, state.deadline) > 1).to(torch.int64)).sum(-1)
-
-        return torch.stack(outputs, 1), torch.stack(sequences, 1), cost, state.tasks_done_success.tolist()
-
     def get_current_state_encoding(self, current_state):
         vec = torch.cat((current_state.machines_current_operation.to(torch.float32),current_state.operations_status, current_state.operations_availability,
                          current_state.machines_operation_finish_time_pred),1)
@@ -363,7 +283,7 @@ class AttentionModel(nn.Module):
         # print(state.visited_.all().item())
 
         #initial tasks
-        while not (self.shrink_size is None and not (state.all_finished().item() == 0) or state.i == 100):
+        while not (self.shrink_size is None and not (state.all_finished().item() == 0) or state.i == 10000):
 
             if self.shrink_size is not None:
                 unfinished = torch.nonzero(state.get_finished() == 0)

@@ -49,6 +49,7 @@ class SolutionPrinter(cp_model.CpSolverSolutionCallback):
 
 
 def flexible_jobshop(jobs, num_machines):
+    time_in_Seconds = 1000
     """Solve a small flexible jobshop problem."""
     # Data part.
     # jobs = [  # task = (processing_time, machine_id)
@@ -208,6 +209,7 @@ def flexible_jobshop(jobs, num_machines):
 
     # Solve model.
     solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = time_in_Seconds
     solution_printer = SolutionPrinter()
     status = solver.Solve(model)
 
