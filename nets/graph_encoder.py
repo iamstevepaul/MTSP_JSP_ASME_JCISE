@@ -877,7 +877,7 @@ class GCAPCN_K_2_P_2_L_1(nn.Module):
 
         self.W_F = nn.Linear(n_dim * n_p, n_dim)
 
-        self.activ = nn.LeakyReLU()
+        self.activ = nn.Sigmoid()
 
     def forward(self, data, mask=None):
         X = torch.cat(((data["task_job_mapping"].permute(0, 2, 1)).to(torch.float32),
