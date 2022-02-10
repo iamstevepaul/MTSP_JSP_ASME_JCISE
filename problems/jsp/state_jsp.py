@@ -134,7 +134,7 @@ class StateJSP(NamedTuple):
 
     def update(self, selected):
         # print('************** New decision **************') #check after 3rd iteration
-
+        # print(selected[1,:])
         ids_wait = ((selected[:,1] == 0).nonzero()).squeeze(dim=1)
         ids_non_wait = ((selected[:,1] != 0).nonzero()).squeeze(dim=1)
         machine_selected = selected[:, 0]

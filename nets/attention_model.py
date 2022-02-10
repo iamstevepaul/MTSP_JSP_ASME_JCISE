@@ -99,8 +99,8 @@ class AttentionModel(nn.Module):
         self.init_embed_depot = nn.Linear(2, embedding_dim)
 
         self.init_embed = nn.Linear(node_dim, embedding_dim)
-        n_machines = 10
-        n_tasks = 50
+        n_machines = 5
+        n_tasks = 20
 
 
         self.embedder = GCAPCN_K_2_P_2_L_1(
@@ -121,10 +121,11 @@ class AttentionModel(nn.Module):
         self.project_out_machine = nn.Linear(embedding_dim, embedding_dim, bias=False)
         self.project_out_task = nn.Linear(embedding_dim, embedding_dim, bias=False)
         self.state_embedding = nn.Linear(2*(n_tasks+n_machines)+1, embedding_dim)
-        self.machine_encoding = nn.Linear(2*(n_tasks+1), embedding_dim)
+        machine_encoding = [nn.Linear(2*(n_tasks+1), embedding_dim), nn.LeakyReLU(), nn.Linear(embedding_dim, embedding_dim), nn.LeakyReLU()]
+        self.machine_encoding = nn.Sequential(*machine_encoding)
         self.machine_context_encoding = nn.Linear(2*embedding_dim, embedding_dim)
 
-        wait_encoding = [nn.Linear(2*embedding_dim, 2*embedding_dim),nn.Linear(2*embedding_dim, 2*embedding_dim),nn.Linear(2*embedding_dim, embedding_dim)]
+        wait_encoding = [nn.Linear(2*embedding_dim, 4*embedding_dim),nn.Linear(4*embedding_dim, 2*embedding_dim),nn.Linear(2*embedding_dim, embedding_dim)]
         self.machine_wait_encoding = nn.Sequential(*wait_encoding)
 
     def set_decode_type(self, decode_type, temp=None):
@@ -285,6 +286,8 @@ class AttentionModel(nn.Module):
         #initial tasks
         while not (self.shrink_size is None and not (state.all_finished().item() == 0) or state.i == 500):
 
+            # print(i)
+
             if self.shrink_size is not None:
                 unfinished = torch.nonzero(state.get_finished() == 0)
                 if len(unfinished) == 0:
@@ -300,6 +303,10 @@ class AttentionModel(nn.Module):
             # Only the required ones goes here, so we should
             #  We need a variable that track which all tasks are available
             current_state_encoding = self.get_current_state_encoding(state).unsqueeze(dim=1)
+
+            if i == 24:
+                d = 0
+                pass
 
             entity = 'machine'
             log_p_machine, machine_mask = self._get_log_p(fixed_machine, state, query=current_state_encoding, entity=entity)
@@ -442,6 +449,8 @@ class AttentionModel(nn.Module):
         # Compute the mask
         # mask = state.get_mask()
         if entity == "machine":
+            all_done_ids = (state.operations_status == 2).to(torch.float32).prod(dim=1).nonzero().squeeze(dim=1)
+            # not_all_done_ids = ((state.operations_status == 2).to(torch.float32).prod(dim=1) == 0).nonzero().squeeze(dim=1)
             if state.i < state.n_machines[0]:
                 mask = (state.machine_status != 0).permute(0, 2, 1)
             else:
@@ -455,6 +464,8 @@ class AttentionModel(nn.Module):
                 ids_with_not_all_wait = (state.machine_status.squeeze().prod(dim=1) != 1).nonzero().squeeze(dim=1)
                 if ids_with_not_all_wait.size()[0] > 0: # ids with not all wait, mask machine with status 2
                     mask[ids_with_not_all_wait,:,:] = (state.machine_status[ids_with_not_all_wait, :, :] == 2).permute(0, 2, 1)
+            if all_done_ids.size()[0] > 0:
+                mask[all_done_ids,:,:] = False
         else:
             selected_machine_operation_accessibility = state.task_machine_accessibility[state.ids.squeeze(),
                                                        machine_selected.squeeze(), :]
