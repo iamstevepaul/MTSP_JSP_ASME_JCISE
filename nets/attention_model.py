@@ -99,8 +99,8 @@ class AttentionModel(nn.Module):
         self.init_embed_depot = nn.Linear(2, embedding_dim)
 
         self.init_embed = nn.Linear(node_dim, embedding_dim)
-        n_machines = 5
-        n_tasks = 20
+        n_machines = 50
+        n_tasks = 200
 
 
         self.embedder = GCAPCN_K_2_P_2_L_1(
@@ -284,7 +284,7 @@ class AttentionModel(nn.Module):
         # print(state.visited_.all().item())
 
         #initial tasks
-        while not (self.shrink_size is None and not (state.all_finished().item() == 0) or state.i == 500):
+        while not (self.shrink_size is None and not (state.all_finished().item() == 0) or state.i == 400):
 
             # print(i)
 
@@ -357,6 +357,7 @@ class AttentionModel(nn.Module):
         cost = torch.div(state.current_time, worst) + ((state.operations_status != 2).to(torch.float32).sum(dim=1) / state.operations_status.shape[1]).unsqueeze(dim=1) # makespan #((mk < mk.max()).to(torch.float32)*mk).max(1)[0][:, None]/state.n_agents
 
 
+
         return torch.stack(outputs_machine, 1),  torch.stack(outputs_task, 1), torch.stack(sequences, 1), cost
 
     def sample_many(self, input, batch_rep=1, iter_rep=1):
@@ -376,7 +377,7 @@ class AttentionModel(nn.Module):
 
     def _select_node(self, probs, mask):
 
-        if torch.rand((1,1)).item() > 0.3:
+        if torch.rand((1,1)).item() > 0.5:
             self.decode_type = "greedy"
         else:
             self.decode_type = "sampling"
@@ -482,8 +483,8 @@ class AttentionModel(nn.Module):
 
             ids_not_all_unavailable = ((m1.squeeze(dim=1).to(torch.float32)[:, 1:]).sum(dim=1) < state.n_tasks).nonzero().squeeze(dim=1)
             if ids_not_all_unavailable.size()[0] > 0: # if atelast one non wait task is there, then set mask wait
-                pass
-                # mask[ids_not_all_unavailable,0,0] = True
+                # pass
+                mask[ids_not_all_unavailable,0,0] = True
 
         # Compute logits (unnormalized log_p)
         log_p, glimpse = self._one_to_many_logits(query, glimpse_K, glimpse_V, logit_K, mask, entity)

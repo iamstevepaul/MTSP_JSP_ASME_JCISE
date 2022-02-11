@@ -129,9 +129,9 @@ class JSPDataset(Dataset):
         else:
 
             n_samples = num_samples
-            n_tasks = 20
-            n_machines = 5
-            n_jobs = 5
+            n_tasks = 200
+            n_machines = 50
+            n_jobs = 50
             time_low = 10
             time_high = 100
 

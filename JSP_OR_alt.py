@@ -240,7 +240,7 @@ def flexible_jobshop(jobs, num_machines):
 
 data_dir = 'Data/JSP/'
 job_smaples_infos = [[5,20,5], [10,50,10], [20,100,20], [50,200,50], [100,500,100]]
-ind = 4
+ind = 3
 n_jobs = job_smaples_infos[ind][0]
 n_tasks = job_smaples_infos[ind][1]
 n_machines = job_smaples_infos[ind][2]
