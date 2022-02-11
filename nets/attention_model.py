@@ -129,7 +129,7 @@ class AttentionModel(nn.Module):
         self.machine_wait_encoding = nn.Sequential(*wait_encoding)
 
     def set_decode_type(self, decode_type, temp=None):
-        self.decode_type = decode_type
+        self.decode_type = "sampling"#decode_type
         if temp is not None:  # Do not change temperature if not provided
             self.temp = temp
 
@@ -376,6 +376,11 @@ class AttentionModel(nn.Module):
 
     def _select_node(self, probs, mask):
 
+        if torch.rand((1,1)).item() > 0.3:
+            self.decode_type = "greedy"
+        else:
+            self.decode_type = "sampling"
+
         assert (probs == probs).all(), "Probs should not contain any nans"
 
         if self.decode_type == "greedy":
@@ -385,6 +390,9 @@ class AttentionModel(nn.Module):
 
         elif self.decode_type == "sampling":
             selected = probs.multinomial(1).squeeze(1)
+
+            if ((probs[torch.arange(0,selected.shape[0]), selected] == 0).to(torch.float32)).sum() > 0:
+                ft = 0
 
             # Check if sampling went OK, can go wrong due to bug on GPU
             # See https://discuss.pytorch.org/t/bad-behavior-of-multinomial-function/10232
