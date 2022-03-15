@@ -99,13 +99,13 @@ class AttentionModel(nn.Module):
         self.init_embed_depot = nn.Linear(2, embedding_dim)
 
         self.init_embed = nn.Linear(node_dim, embedding_dim)
-        n_machines = 50
+        n_machines = 15
         n_tasks = 200
 
 
         self.embedder = GCAPCN_K_2_P_2_L_1(
                     n_dim=embedding_dim,
-                    node_dim=n_machines+1
+                    node_dim=n_machines
                 )
 
         # For each node we compute (glimpse key, glimpse value, logit key) so 3 * embedding_dim
@@ -377,7 +377,7 @@ class AttentionModel(nn.Module):
 
     def _select_node(self, probs, mask):
 
-        if torch.rand((1,1)).item() > 0.5:
+        if torch.rand((1,1)).item() > 0.1:
             self.decode_type = "greedy"
         else:
             self.decode_type = "sampling"
@@ -481,10 +481,10 @@ class AttentionModel(nn.Module):
             m1 = (selected_machine_operation_accessibility * state.operations_availability).unsqueeze(dim=1) == 0
             mask = (selected_machine_operation_accessibility * state.operations_availability).unsqueeze(dim=1) == 0
 
-            ids_not_all_unavailable = ((m1.squeeze(dim=1).to(torch.float32)[:, 1:]).sum(dim=1) < state.n_tasks).nonzero().squeeze(dim=1)
-            if ids_not_all_unavailable.size()[0] > 0: # if atelast one non wait task is there, then set mask wait
-                # pass
-                mask[ids_not_all_unavailable,0,0] = True
+            # ids_not_all_unavailable = ((m1.squeeze(dim=1).to(torch.float32)[:, 1:]).sum(dim=1) < state.n_tasks).nonzero().squeeze(dim=1)
+            # if ids_not_all_unavailable.size()[0] > 0: # if atelast one non wait task is there, then set mask wait
+            #     # pass
+            #     mask[ids_not_all_unavailable,0,0] = True
 
         # Compute logits (unnormalized log_p)
         log_p, glimpse = self._one_to_many_logits(query, glimpse_K, glimpse_V, logit_K, mask, entity)

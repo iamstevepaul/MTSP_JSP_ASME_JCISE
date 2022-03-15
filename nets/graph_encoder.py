@@ -880,9 +880,8 @@ class GCAPCN_K_2_P_2_L_1(nn.Module):
         self.activ = nn.Sigmoid()
 
     def forward(self, data, mask=None):
-        X = torch.cat(((data["task_job_mapping"].permute(0, 2, 1)).to(torch.float32),
-                       torch.div((data["task_machine_time"][:,:,1:].permute(0, 2, 1)).to(torch.float32),
-                                 data["task_machine_time"][:,:,1:].max())), -1)
+        X = torch.div((data["task_machine_time"][:,:,1:].permute(0, 2, 1)).to(torch.float32),
+                                 data["task_machine_time"][:,:,1:].max())
 
         # X_loc = X
         # distance_matrix = (((X_loc[:, :, None] - X_loc[:, None]) ** 2).sum(-1)) ** .5

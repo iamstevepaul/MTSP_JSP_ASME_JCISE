@@ -49,7 +49,7 @@ class SolutionPrinter(cp_model.CpSolverSolutionCallback):
 
 
 def flexible_jobshop(jobs, num_machines):
-    time_in_Seconds = 1000
+    time_in_Seconds = 50
     """Solve a small flexible jobshop problem."""
     # Data part.
     # jobs = [  # task = (processing_time, machine_id)

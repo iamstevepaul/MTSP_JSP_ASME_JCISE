@@ -28,7 +28,7 @@ def get_options(args=None):
 
     parser.add_argument('--val_size', type=int, default=1000, # changed
                         help='Number of instances used for reporting validation performance')
-    parser.add_argument('--eval_batch_size', type=int, default=500,  ## changed
+    parser.add_argument('--eval_batch_size', type=int, default=1000,  ## changed
                         help="Batch size to use during (baseline) evaluation")
     parser.add_argument('--val_dataset', type=str, default=None, help='Dataset file to use for validation')
 

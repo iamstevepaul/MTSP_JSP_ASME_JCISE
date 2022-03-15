@@ -130,7 +130,7 @@ class JSPDataset(Dataset):
 
             n_samples = num_samples
             n_tasks = 200
-            n_machines = 50
+            n_machines = 15
             n_jobs = 50
             time_low = 10
             time_high = 100
